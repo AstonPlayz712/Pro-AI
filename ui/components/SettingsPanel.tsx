@@ -6,16 +6,19 @@ import type { EngineMode } from "../core/engineSelector";
 import { selectEngine } from "../core/engineSelector";
 import { useConnectivity } from "../hooks/useConnectivity";
 import { ensureDefaultSettings, setSettings, type SettingsState } from "../storage/db";
-import { enqueueSettingsSync } from "../sync/offlineSync";
+import { enqueueSettingsSync, syncPendingItems } from "../sync/offlineSync";
+import { useSyncStatus } from "../hooks/useSyncStatus";
 
 export function SettingsPanel(): React.JSX.Element {
   const { state: conn } = useConnectivity();
+  const { pendingCount, refresh: refreshSync } = useSyncStatus();
   const [settings, setLocalSettings] = useState<SettingsState>({
     engineMode: "auto",
     cloudModel: "gpt-4o-mini",
     localModel: "phi3",
   });
   const [selectedEngine, setSelectedEngine] = useState<string>("-");
+  const [whyLocal, setWhyLocal] = useState<string>("");
 
   useEffect(() => {
     void (async () => {
@@ -28,6 +31,7 @@ export function SettingsPanel(): React.JSX.Element {
     void (async () => {
       const sel = await selectEngine(settings.engineMode);
       setSelectedEngine(sel.engineId);
+      setWhyLocal(sel.engineId === "local" ? sel.decision.reason : "");
     })();
   }, [settings.engineMode]);
 
@@ -36,6 +40,7 @@ export function SettingsPanel(): React.JSX.Element {
     setLocalSettings(next);
     await setSettings(next);
     await enqueueSettingsSync();
+    await refreshSync();
   };
 
   return (
@@ -43,11 +48,27 @@ export function SettingsPanel(): React.JSX.Element {
       <div className="vsc-panel-title">Settings</div>
       <div className="vsc-panel-body">
         <div className="vsc-form-row">
+          <label className="vsc-label">Offline sync</label>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <button
+              type="button"
+              className="vsc-command__btn"
+              onClick={() => void syncPendingItems().then(() => refreshSync())}
+              title="Attempt to sync pending items now (requires stable internet)."
+            >
+              Sync now
+            </button>
+            <span className="vsc-muted">Pending: {pendingCount}</span>
+          </div>
+        </div>
+
+        <div className="vsc-form-row">
           <label className="vsc-label">Engine mode</label>
           <select
             className="vsc-select"
             value={settings.engineMode}
             onChange={(e) => void update({ engineMode: e.target.value as EngineMode })}
+            title="Auto selects cloud when stable; otherwise local. Force options override selection."
           >
             <option value="auto">Auto</option>
             <option value="force-cloud">Force Cloud</option>
@@ -82,6 +103,12 @@ export function SettingsPanel(): React.JSX.Element {
             <div className="vsc-kv__k">Current engine</div>
             <div className="vsc-kv__v">{selectedEngine}</div>
           </div>
+          {whyLocal && (
+            <div className="vsc-kv__row">
+              <div className="vsc-kv__k">Why local?</div>
+              <div className="vsc-kv__v">{whyLocal}</div>
+            </div>
+          )}
           <div className="vsc-kv__row">
             <div className="vsc-kv__k">Type</div>
             <div className="vsc-kv__v">{conn?.type ?? "unknown"}</div>

@@ -21,6 +21,10 @@ export type SettingsState = {
   engineMode: "auto" | "force-cloud" | "force-local";
   cloudModel: string;
   localModel: string;
+  updatedAt?: number;
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
 };
 
 export type SyncQueueItem = {
@@ -28,6 +32,11 @@ export type SyncQueueItem = {
   kind: "settings" | "metadata" | "conversation_titles";
   payload: unknown;
   createdAt: number;
+  updatedAt?: number;
+  attempts?: number;
+  nextAttemptAt?: number;
+  lastError?: string;
+  deviceId?: string;
 };
 
 export type TelemetryEvent = {
@@ -72,7 +81,7 @@ interface ProAIDB extends DBSchema {
 }
 
 const DB_NAME = "pro-ai";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 function makeId(prefix: string) {
   return `${prefix}:${Date.now()}:${Math.random().toString(16).slice(2)}`;
@@ -80,7 +89,7 @@ function makeId(prefix: string) {
 
 async function getDb() {
   return openDB<ProAIDB>(DB_NAME, DB_VERSION, {
-    upgrade(db) {
+    upgrade(db, oldVersion) {
       const conv = db.createObjectStore("conversations", { keyPath: "id" });
       conv.createIndex("by-updated", "updatedAt");
 
@@ -95,6 +104,8 @@ async function getDb() {
 
       const t = db.createObjectStore("telemetry", { keyPath: "id" });
       t.createIndex("by-ts", "ts");
+
+      void oldVersion;
     },
   });
 }
@@ -106,7 +117,7 @@ export async function getSettings(): Promise<SettingsState | null> {
 
 export async function setSettings(state: SettingsState): Promise<void> {
   const db = await getDb();
-  await db.put("settings", state, "default");
+  await db.put("settings", { ...state, updatedAt: Date.now() }, "default");
 }
 
 export async function ensureDefaultSettings(): Promise<SettingsState> {
@@ -116,6 +127,10 @@ export async function ensureDefaultSettings(): Promise<SettingsState> {
     engineMode: "auto",
     cloudModel: "gpt-4o-mini",
     localModel: "phi3",
+    temperature: 0.7,
+    topP: 0.95,
+    maxTokens: 512,
+    updatedAt: Date.now(),
   };
   await setSettings(defaults);
   return defaults;
@@ -173,7 +188,12 @@ export async function listMessages(conversationId: string, limit = 200): Promise
 
 export async function addSyncQueueItem(item: SyncQueueItem): Promise<void> {
   const db = await getDb();
-  await db.put("syncQueue", item);
+  await db.put("syncQueue", {
+    attempts: 0,
+    nextAttemptAt: 0,
+    updatedAt: item.updatedAt ?? item.createdAt,
+    ...item,
+  });
 }
 
 export async function listSyncQueueItems(limit = 50): Promise<SyncQueueItem[]> {

@@ -3,22 +3,46 @@
 import React from "react";
 
 import { useConnectivity } from "../hooks/useConnectivity";
+import { ensureDefaultSettings } from "../storage/db";
+import { selectEngine } from "../core/engineSelector";
 
 export function ModeBanner(): React.JSX.Element {
   const { state } = useConnectivity();
+  const [detail, setDetail] = React.useState<string>("");
+  const [headline, setHeadline] = React.useState<string>("Checking connectivity…");
 
-  const online = state?.online ?? false;
-  const realInternet = state?.realInternet ?? false;
-  const slow = state?.isSlow ?? false;
-  const type = state?.type ?? "unknown";
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (!state) return;
+      const settings = await ensureDefaultSettings();
+      const sel = await selectEngine(settings.engineMode, { connectivity: state });
 
-  let headline = "Checking connectivity…";
-  if (!online) headline = "Offline · Local model · Reduced capabilities";
-  else if (online && !realInternet) headline = "Online (unstable) · Local model · Reduced capabilities";
-  else if (slow) headline = "Slow connection detected — using local model";
-  else headline = "Online · Cloud model · Full capabilities";
+      const typeText =
+        state.type === "wifi"
+          ? "Connected via Wi‑Fi"
+          : state.type === "cellular"
+            ? "Connected via Mobile Data"
+            : state.type === "ethernet"
+              ? "Connected via Ethernet"
+              : "";
 
-  const detail = type === "wifi" ? "Connected via Wi‑Fi" : type === "cellular" ? "Connected via Mobile Data" : "";
+      const head =
+        sel.engineId === "cloud"
+          ? "Online · Cloud model · Full capabilities"
+          : state.online
+            ? "Local model · Reduced capabilities"
+            : "Offline · Local model · Reduced capabilities";
+
+      if (!cancelled) {
+        setHeadline(head);
+        setDetail([typeText, sel.decision.reason].filter(Boolean).join(" · "));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state]);
 
   return (
     <div className="vsc-banner" role="status" aria-label="Connectivity banner">

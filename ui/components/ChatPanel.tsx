@@ -12,6 +12,7 @@ import {
   type StoredMessage,
 } from "../storage/db";
 import { useConnectivity } from "../hooks/useConnectivity";
+import { recordTelemetryEvent } from "../telemetry/telemetry";
 
 function toChatMessages(messages: StoredMessage[]): ChatMessage[] {
   return messages.map((m) => ({ role: m.role, content: m.content, id: m.id, createdAt: new Date(m.createdAt).toISOString() }));
@@ -82,13 +83,25 @@ export function ChatPanel(): React.JSX.Element {
     try {
       const iterable = await engine.generate(toChatMessages(existing));
       setEngineId(engine.id);
+      recordTelemetryEvent({ type: "engine_selected", ts: Date.now(), data: { engineId: engine.id, mode: settings.engineMode } });
+
+      // Batch UI updates to ~20fps.
+      let lastFlush = 0;
+      const flushEveryMs = 50;
+      const flush = () => {
+        setMessages((prev) => prev.map((m) => (m.id === assistantTempId ? { ...m, content: assistantBuffer } : m)));
+      };
 
       for await (const chunk of iterable) {
         assistantBuffer += chunk;
-        setMessages((prev) =>
-          prev.map((m) => (m.id === assistantTempId ? { ...m, content: assistantBuffer } : m))
-        );
+        const now = performance.now();
+        if (now - lastFlush >= flushEveryMs) {
+          lastFlush = now;
+          flush();
+        }
       }
+
+      flush();
 
       // Persist final assistant message.
       await addMessage(conversationId, "assistant", assistantBuffer.trim());
