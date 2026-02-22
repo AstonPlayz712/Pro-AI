@@ -1,0 +1,23 @@
+/* VS Code–inspired theme tokens (placeholder). */
+
+:root {
+  --vsc-bg: #1e1e1e;
+  --vsc-surface: #252526;
+  --vsc-surface-2: #2d2d2d;
+  --vsc-border: #3c3c3c;
+  --vsc-text: #d4d4d4;
+  --vsc-muted: #9da0a6;
+  --vsc-accent: #007acc;
+  --vsc-accent-2: #0e639c;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--vsc-bg);
+  color: var(--vsc-text);
+}
+
+.vsc-muted { color: var(--vsc-muted); }
