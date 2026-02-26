@@ -19,6 +19,7 @@ export type BackendEngineOptions = {
   mode: EngineMode;
   cloudModel?: string;
   localModel?: string;
+  projectId?: string;
 };
 
 export class BackendChatEngine implements ChatEngine {
@@ -36,6 +37,7 @@ export class BackendChatEngine implements ChatEngine {
         mode: this.options.mode,
         cloudModel: this.options.cloudModel,
         localModel: this.options.localModel,
+        projectId: this.options.projectId,
         connectivity,
       }),
     });

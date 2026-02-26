@@ -5,6 +5,7 @@ import "../styles/theme.css";
 import "../styles/layout.css";
 
 import { ModeProvider } from "../context/ModeContext";
+import { ProjectProvider } from "../context/ProjectContext";
 
 export const metadata: Metadata = {
   title: "AI Workspace UI",
@@ -19,7 +20,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <ModeProvider>{children}</ModeProvider>
+        <ModeProvider>
+          <ProjectProvider>{children}</ProjectProvider>
+        </ModeProvider>
       </body>
     </html>
   );
