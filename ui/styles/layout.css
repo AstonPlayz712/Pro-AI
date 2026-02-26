@@ -152,6 +152,12 @@
   gap: 10px;
 }
 
+.vsc-project-switcher {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .vsc-chat__top {
   display: flex;
   justify-content: space-between;

@@ -13,6 +13,7 @@ import {
 } from "../storage/db";
 import { useConnectivity } from "../hooks/useConnectivity";
 import { recordTelemetryEvent } from "../telemetry/telemetry";
+import { useProjectManager } from "../hooks/useProjectManager";
 
 function toChatMessages(messages: StoredMessage[]): ChatMessage[] {
   return messages.map((m) => ({ role: m.role, content: m.content, id: m.id, createdAt: new Date(m.createdAt).toISOString() }));
@@ -20,6 +21,7 @@ function toChatMessages(messages: StoredMessage[]): ChatMessage[] {
 
 export function ChatPanel(): React.JSX.Element {
   const { state: conn } = useConnectivity();
+  const { project } = useProjectManager();
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<StoredMessage[]>([]);
   const [input, setInput] = useState("");
@@ -62,6 +64,7 @@ export function ChatPanel(): React.JSX.Element {
       mode: settings.engineMode,
       cloudModel: settings.cloudModel,
       localModel: settings.localModel,
+      projectId: project.id,
     });
 
     // Local warming indicator (placeholder UX).
@@ -83,7 +86,11 @@ export function ChatPanel(): React.JSX.Element {
     try {
       const iterable = await engine.generate(toChatMessages(existing));
       setEngineId(engine.id);
-      recordTelemetryEvent({ type: "engine_selected", ts: Date.now(), data: { engineId: engine.id, mode: settings.engineMode } });
+      recordTelemetryEvent({
+        type: "engine_selected",
+        ts: Date.now(),
+        data: { engineId: engine.id, mode: settings.engineMode, projectId: project.id },
+      });
 
       // Batch UI updates to ~20fps.
       let lastFlush = 0;
@@ -116,6 +123,7 @@ export function ChatPanel(): React.JSX.Element {
     <div className="vsc-chat">
       <div className="vsc-chat__top">
         <div className="vsc-chat__engine">
+          <span className="vsc-muted">Project:</span> <span className="vsc-badge">{project.name}</span>
           <span className="vsc-muted">Engine:</span> <span className={`vsc-engine-badge ${engineId}`}>{engineId}</span>
           {warmingUp && <span className="vsc-badge">Local engine warming up</span>}
           {!canUseCloud && <span className="vsc-badge">Cloud temporarily disabled</span>}
