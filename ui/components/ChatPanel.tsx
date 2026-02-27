@@ -2,7 +2,10 @@
 
 import React, { useEffect, useRef, useState } from "react";
 
-import type { ChatMessage } from "../core/chatTypes";
+import type { AiMode } from "../core/aiModeManager";
+import type { ChatFile, ChatMessage } from "../core/chatTypes";
+import { classifyConnectivity } from "../core/connectivityPolicy";
+import { isLargeTask, resolveAutomaticMode } from "../core/modeSwitching";
 import { BackendChatEngine } from "../engines/backendEngine";
 import {
   addMessage,
@@ -14,6 +17,8 @@ import {
 import { useConnectivity } from "../hooks/useConnectivity";
 import { recordTelemetryEvent } from "../telemetry/telemetry";
 import { useProjectManager } from "../hooks/useProjectManager";
+import { MessageInput } from "./MessageInput";
+import { useAiModeManager } from "../hooks/useAiModeManager";
 
 function toChatMessages(messages: StoredMessage[]): ChatMessage[] {
   return messages.map((m) => ({ role: m.role, content: m.content, id: m.id, createdAt: new Date(m.createdAt).toISOString() }));
@@ -22,10 +27,10 @@ function toChatMessages(messages: StoredMessage[]): ChatMessage[] {
 export function ChatPanel(): React.JSX.Element {
   const { state: conn } = useConnectivity();
   const { project } = useProjectManager();
+  const { defaultMode, currentMode, setDefaultMode, temporarilyUse, resetToDefault } = useAiModeManager();
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<StoredMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [engineId, setEngineId] = useState<"cloud" | "local" | "-">("-");
+  const [engineId, setEngineId] = useState<"cloud" | "local" | "hybrid" | "-">("-");
   const [busy, setBusy] = useState(false);
   const [warmingUp, setWarmingUp] = useState(false);
 
@@ -43,25 +48,30 @@ export function ChatPanel(): React.JSX.Element {
     })();
   }, []);
 
-  const canUseCloud = Boolean(conn?.realInternet && !conn?.isSlow && conn?.cloudHealthy);
+  const quality = classifyConnectivity(conn);
+  const canUseCloud = quality === "good";
 
-  const send = async () => {
+  const send = async (text: string, file?: ChatFile) => {
     if (!conversationId) return;
-    const text = input.trim();
-    if (!text) return;
+    const normalizedText = text.trim() || (file ? "Please analyze the attached file." : "");
+    if (!normalizedText) return;
 
-    setInput("");
     setBusy(true);
 
-    await addMessage(conversationId, "user", text);
+    const userDisplay = file ? `${normalizedText}\n\n[Attached file: ${file.name}]` : normalizedText;
+    await addMessage(conversationId, "user", userDisplay);
     const existing = await listMessages(conversationId);
     setMessages(existing);
 
     const settings = await ensureDefaultSettings();
+    const largeTask = isLargeTask(toChatMessages(existing), file);
+    const decision = resolveAutomaticMode(defaultMode, quality, largeTask);
+    if (decision.temporary) {
+      temporarilyUse(decision.mode);
+    }
 
-    // If user chose auto, we still pass auto; the BackendChatEngine will attach connectivity snapshot.
     const engine = new BackendChatEngine({
-      mode: settings.engineMode,
+      mode: decision.mode,
       cloudModel: settings.cloudModel,
       localModel: settings.localModel,
       projectId: project.id,
@@ -84,12 +94,19 @@ export function ChatPanel(): React.JSX.Element {
     ]);
 
     try {
-      const iterable = await engine.generate(toChatMessages(existing));
+      const iterable = await engine.generate(toChatMessages(existing), { file });
       setEngineId(engine.id);
       recordTelemetryEvent({
         type: "engine_selected",
         ts: Date.now(),
-        data: { engineId: engine.id, mode: settings.engineMode, projectId: project.id },
+        data: {
+          engineId: engine.id,
+          mode: decision.mode,
+          defaultMode,
+          temporary: decision.temporary,
+          projectId: project.id,
+          quality,
+        },
       });
 
       // Batch UI updates to ~20fps.
@@ -116,6 +133,7 @@ export function ChatPanel(): React.JSX.Element {
     } finally {
       setBusy(false);
       setWarmingUp(false);
+      resetToDefault();
     }
   };
 
@@ -123,6 +141,13 @@ export function ChatPanel(): React.JSX.Element {
     <div className="vsc-chat">
       <div className="vsc-chat__top">
         <div className="vsc-chat__engine">
+          <span className="vsc-muted">Default mode:</span>
+          <select className="vsc-select" value={defaultMode} onChange={(e) => setDefaultMode(e.target.value as AiMode)}>
+            <option value="local">Local</option>
+            <option value="cloud">Cloud</option>
+            <option value="hybrid">Hybrid</option>
+          </select>
+          <span className="vsc-muted">Current mode:</span> <span className="vsc-badge">{currentMode}</span>
           <span className="vsc-muted">Project:</span> <span className="vsc-badge">{project.name}</span>
           <span className="vsc-muted">Engine:</span> <span className={`vsc-engine-badge ${engineId}`}>{engineId}</span>
           {warmingUp && <span className="vsc-badge">Local engine warming up</span>}
@@ -140,24 +165,7 @@ export function ChatPanel(): React.JSX.Element {
         <div ref={bottomRef} />
       </div>
 
-      <form
-        className="vsc-chat__composer"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void send();
-        }}
-      >
-        <input
-          className="vsc-chat__input"
-          value={input}
-          disabled={busy}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type a message…"
-        />
-        <button className="vsc-chat__send" type="submit" disabled={busy}>
-          Send
-        </button>
-      </form>
+      <MessageInput busy={busy} onSend={send} />
     </div>
   );
 }

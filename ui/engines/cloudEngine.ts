@@ -1,5 +1,8 @@
 import type { ChatEngine } from "../core/chatEngine";
 import type { ChatMessage } from "../core/chatTypes";
+import type { ConnectivityState } from "../core/connectivity";
+import { classifyConnectivity } from "../core/connectivityPolicy";
+import { withOptionalFile } from "../core/filePrompt";
 
 type OpenAIChatCompletionChunk = {
   choices?: Array<{
@@ -54,13 +57,25 @@ export class CloudEngine implements ChatEngine {
 
   constructor(private readonly options?: { model?: string }) {}
 
-  async generate(messages: ChatMessage[]): Promise<AsyncIterable<string>> {
+  async generate(
+    messages: ChatMessage[],
+    options?: { file?: { name: string; type: string; content: string }; connectivity?: ConnectivityState },
+  ): Promise<AsyncIterable<string>> {
+    if (options?.connectivity) {
+      const quality = classifyConnectivity(options.connectivity);
+      if (quality === "offline" || quality === "slow" || quality === "unstable") {
+        throw new Error(`Cloud engine unavailable in ${quality} connectivity.`);
+      }
+    }
+
     const baseUrl = process.env.CLOUD_BASE_URL ?? process.env.OPENAI_BASE_URL ?? "https://api.openai.com";
     const apiKey = process.env.CLOUD_API_KEY ?? process.env.OPENAI_API_KEY;
     const model =
       this.options?.model ?? process.env.CLOUD_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
     if (!apiKey) throw new Error("Missing CLOUD_API_KEY (or OPENAI_API_KEY) for cloud engine.");
+
+    const scopedMessages = withOptionalFile(messages, options?.file);
 
     const url = `${baseUrl.replace(/\/$/, "")}/v1/chat/completions`;
     const resp = await fetch(url, {
@@ -72,7 +87,7 @@ export class CloudEngine implements ChatEngine {
       body: JSON.stringify({
         model,
         stream: true,
-        messages: toOpenAIMessages(messages),
+        messages: toOpenAIMessages(scopedMessages),
       }),
     });
 
