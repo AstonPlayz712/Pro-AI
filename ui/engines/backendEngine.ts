@@ -1,6 +1,6 @@
 import type { ChatEngine } from "../core/chatEngine";
-import type { ChatMessage } from "../core/chatTypes";
-import type { EngineMode } from "../core/engineSelector";
+import type { ChatFile, ChatMessage } from "../core/chatTypes";
+import type { AiMode } from "../core/aiModeManager";
 import { getConnectivityState } from "../core/connectivity";
 
 async function* streamPlainText(resp: Response): AsyncIterable<string> {
@@ -16,19 +16,19 @@ async function* streamPlainText(resp: Response): AsyncIterable<string> {
 }
 
 export type BackendEngineOptions = {
-  mode: EngineMode;
+  mode: AiMode;
   cloudModel?: string;
   localModel?: string;
   projectId?: string;
 };
 
 export class BackendChatEngine implements ChatEngine {
-  public id: "cloud" | "local" = "local";
+  public id: "cloud" | "local" | "hybrid" = "local";
 
   constructor(private readonly options: BackendEngineOptions) {}
 
-  async generate(messages: ChatMessage[]): Promise<AsyncIterable<string>> {
-    const connectivity = this.options.mode === "auto" ? await getConnectivityState() : undefined;
+  async generate(messages: ChatMessage[], options?: { file?: ChatFile }): Promise<AsyncIterable<string>> {
+    const connectivity = await getConnectivityState();
     const resp = await fetch("/api/chat", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -38,12 +38,13 @@ export class BackendChatEngine implements ChatEngine {
         cloudModel: this.options.cloudModel,
         localModel: this.options.localModel,
         projectId: this.options.projectId,
+        file: options?.file,
         connectivity,
       }),
     });
 
     const engineId = resp.headers.get("x-engine-id");
-    if (engineId === "cloud" || engineId === "local") {
+    if (engineId === "cloud" || engineId === "local" || engineId === "hybrid") {
       this.id = engineId;
     }
 

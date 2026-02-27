@@ -1,5 +1,6 @@
 import type { ChatEngine } from "../core/chatEngine";
 import type { ChatMessage } from "../core/chatTypes";
+import { withOptionalFile } from "../core/filePrompt";
 
 type OllamaChatChunk = {
   message?: { role?: string; content?: string };
@@ -46,9 +47,10 @@ export class LocalEngine implements ChatEngine {
 
   constructor(private readonly options?: { model?: string }) {}
 
-  async generate(messages: ChatMessage[]): Promise<AsyncIterable<string>> {
+  async generate(messages: ChatMessage[], options?: { file?: { name: string; type: string; content: string } }): Promise<AsyncIterable<string>> {
     const url = "http://localhost:11434/api/chat";
     const model = this.options?.model ?? process.env.LOCAL_MODEL ?? "phi3";
+    const scopedMessages = withOptionalFile(messages, options?.file);
 
     const resp = await fetch(url, {
       method: "POST",
@@ -56,7 +58,7 @@ export class LocalEngine implements ChatEngine {
       body: JSON.stringify({
         model,
         stream: true,
-        messages: toOllamaMessages(messages),
+        messages: toOllamaMessages(scopedMessages),
       }),
     });
 

@@ -1,6 +1,7 @@
-import type { ChatMessage } from "./chatTypes";
+import type { ChatFile, ChatMessage } from "./chatTypes";
+import type { ConnectivityState } from "./connectivity";
 
 export interface ChatEngine {
-  id: "cloud" | "local";
-  generate(messages: ChatMessage[]): Promise<AsyncIterable<string>>;
+  id: "cloud" | "local" | "hybrid";
+  generate(messages: ChatMessage[], options?: { file?: ChatFile; connectivity?: ConnectivityState }): Promise<AsyncIterable<string>>;
 }

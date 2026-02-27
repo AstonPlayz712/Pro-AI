@@ -6,6 +6,7 @@ import "../styles/layout.css";
 
 import { ModeProvider } from "../context/ModeContext";
 import { ProjectProvider } from "../context/ProjectContext";
+import { AiModeProvider } from "../context/AiModeContext";
 
 export const metadata: Metadata = {
   title: "AI Workspace UI",
@@ -21,7 +22,9 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <ModeProvider>
-          <ProjectProvider>{children}</ProjectProvider>
+          <ProjectProvider>
+            <AiModeProvider>{children}</AiModeProvider>
+          </ProjectProvider>
         </ModeProvider>
       </body>
     </html>

@@ -1,35 +1,114 @@
 # Pro-AI UI
 
-Connectivity-aware hybrid workspace UI with cloud/local engines, offline sync, diagnostics, and a new unified multi-project platform layer.
+Samsung-style hybrid assistant runtime layered on top of the existing architecture.
 
-## Platform Extension Layer
+## Three AI Modes
 
-The current architecture is preserved and extended with project-scoped abstractions:
+- **Local mode**: always prefers local model execution.
+- **Cloud mode**: uses cloud model, with automatic temporary fallback to local while offline.
+- **Hybrid mode**: connectivity-aware orchestration between local and cloud engines.
 
-- Project contracts and registry: `core/platformProjects.ts`
-- Project action routing: `core/platformRouter.ts`
-- Active project context: `context/ProjectContext.tsx` + `hooks/useProjectManager.ts`
-- Unified task endpoint: `app/api/platform/route.ts`
-- Project discovery endpoint: `app/api/projects/route.ts`
+Core implementation:
 
-Supported project IDs:
+- `core/aiModeManager.ts`
+- `context/AiModeContext.tsx`
+- `hooks/useAiModeManager.ts`
 
-- `chatbot`
-- `tube-map`
-- `tfl-live-updates`
-- `routing`
-- `offline-tools`
-- `diagnostics`
-- `sync`
+## Hybrid Behavior
 
-## Existing Hybrid Runtime (unchanged, extended)
+Hybrid mode follows this flow:
 
-- Connectivity checks + cloud health: `core/connectivity.ts`
-- Engine selection policy: `core/engineSelector.ts`
-- Cloud/local inference engines: `engines/cloudEngine.ts`, `engines/localEngine.ts`
-- Backend route-based chat engine: `engines/backendEngine.ts`
-- Chat route with project-scoped system context: `app/api/chat/route.ts`
-- Offline queue + sync: `storage/db.ts`, `sync/offlineSync.ts`, `app/api/sync/route.ts`
+1. Start local model immediately.
+2. Start cloud model only when connectivity quality is `good`.
+3. If cloud finishes first, return cloud result.
+4. If cloud is unavailable/slow/offline, use local result.
+5. If both finish, return local output with cloud refinement block.
+6. After request, runtime returns to default mode.
+
+Implementation:
+
+- `engines/hybridEngine.ts`
+- `core/connectivityPolicy.ts`
+- `core/modeSwitching.ts`
+
+## Temporary Mode Switching
+
+Automatic and request-scoped switching rules:
+
+- Default `local` + large task + good connectivity => temporary `cloud`
+- Default `cloud` + offline => temporary `local`
+- Default `hybrid` => hybrid decision path
+- End of request => `resetToDefault()`
+
+## File Reading
+
+Supported upload types:
+
+- PDF
+- DOCX
+- TXT/Markdown text
+
+Flow:
+
+1. Client uploads file to `POST /api/read-file`.
+2. Server extracts text and stores it for the next request.
+3. Chat request sends file content to `/api/chat`.
+4. Local/cloud/hybrid engines append file text to prompt context.
+
+Implementation:
+
+- `app/api/read-file/route.ts`
+- `core/serverFileCache.ts`
+- `core/filePrompt.ts`
+- `components/MessageInput.tsx`
+
+## Connectivity Rules
+
+`core/connectivityPolicy.ts` classifies connectivity as:
+
+- `offline`
+- `slow`
+- `good`
+- `unstable`
+
+Hybrid and temporary mode switching consume this classification.
+
+## Mode Selector UI
+
+In chat UI:
+
+- Select default mode: Local / Cloud / Hybrid
+- View current active mode
+- Mode switches can occur temporarily per request and auto-reset
+
+Primary UI files:
+
+- `components/ChatPanel.tsx`
+- `components/MessageInput.tsx`
+- `components/ModeBanner.tsx`
+- `components/StatusBar.tsx`
+
+## Unified Identity
+
+Assistant identity and mode-aware prompts are injected in `/api/chat`:
+
+- Unified identity prompt (same personality/tone/formatting)
+- Mode prompt (`local` / `cloud` / `hybrid`)
+- Existing project-scoped prompt
+
+Implementation:
+
+- `core/systemPrompts.ts`
+- `app/api/chat/route.ts`
+
+## Existing Platform Layer
+
+Project-aware routing remains active:
+
+- `core/platformProjects.ts`
+- `core/platformRouter.ts`
+- `app/api/projects/route.ts`
+- `app/api/platform/route.ts`
 
 ## Run
 

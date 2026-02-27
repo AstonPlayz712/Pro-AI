@@ -191,6 +191,16 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
+.vsc-engine-badge.hybrid {
+  border-color: var(--vsc-accent);
+  background: rgba(159, 232, 112, 0.18);
+}
+
+.vsc-message-input {
+  display: grid;
+  gap: 8px;
+}
+
 .vsc-badge {
   display: inline-flex;
   align-items: center;

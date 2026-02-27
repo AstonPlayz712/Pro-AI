@@ -6,3 +6,9 @@ export type ChatMessage = {
   id?: string;
   createdAt?: string;
 };
+
+export type ChatFile = {
+  name: string;
+  type: string;
+  content: string;
+};

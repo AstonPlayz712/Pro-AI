@@ -20,7 +20,10 @@ export function ProjectProvider({ children }: { children: React.ReactNode }): Re
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) return;
     const project = getProject(stored);
-    setProjectIdState(project.id);
+    const timer = window.setTimeout(() => {
+      setProjectIdState(project.id);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const setProjectId = useCallback((nextProjectId: ProjectId) => {
