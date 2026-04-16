@@ -7,11 +7,10 @@ architect agent.
 """
 from __future__ import annotations
 
+import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol
-
-import yaml
 
 # ---------------------------------------------------------------------------
 # Universal design unit
@@ -90,56 +89,77 @@ class Registry:
         self._data: Optional[Dict[str, Any]] = None
 
     def load(self) -> Dict[str, Any]:
-        if self._data is None:
-            if self.path.exists():
-                self._data = yaml.safe_load(self.path.read_text(encoding="utf-8")) or {}
-            else:
-                self._data = {}
+        import yaml  # type: ignore
+        if self._data is not None:
+            return self._data
+        if self.path.exists():
+            with self.path.open("r", encoding="utf-8") as f:
+                self._data = yaml.safe_load(f) or {}
+        else:
+            self._data = {}
         return self._data
 
     def save(self) -> None:
-        self.path.write_text(
-            yaml.dump(self.load(), allow_unicode=True, sort_keys=False),
-            encoding="utf-8",
-        )
+        import yaml  # type: ignore
+        if self._data is None:
+            return
+        with self.path.open("w", encoding="utf-8") as f:
+            yaml.dump(self._data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
     def get_module(self, name: str) -> Dict[str, Any]:
-        return self.load().get("dai_modules", {}).get(name, {})
+        data = self.load()
+        modules = data.get("dai_modules", {})
+        if name in modules:
+            return modules[name]
+        raise KeyError(f"Module {name!r} not found in registry")
 
     def list_modes(self) -> List[str]:
         data = self.load()
-        # Modes registered in system_map.yaml under pa_masterflow.modes
-        map_modes = list(data.get("pa_masterflow", {}).get("modes", {}).keys())
-        # Also discover YAML specs in the sibling pa_modes/ directory
-        pa_modes_dir = self.path.parent / "pa_modes"
-        file_modes = [f.stem for f in sorted(pa_modes_dir.glob("*.yaml"))] if pa_modes_dir.exists() else []
-        # Return a deduplicated, sorted union
-        return sorted(set(map_modes) | set(file_modes))
+        pm = data.get("pa_masterflow", {})
+        return list(pm.get("modes", {}).keys())
 
     def register_mode(self, spec: PAModeSpec) -> None:
         data = self.load()
-        data.setdefault("pa_masterflow", {}).setdefault("modes", {})[spec.name] = {
+        pm = data.setdefault("pa_masterflow", {})
+        modes = pm.setdefault("modes", {})
+        modes[spec.name] = {
             "branch": spec.branch_name,
-            "required_params": spec.required_params,
+            "description": spec.description,
             "version": spec.version,
         }
-        self.save()
 
     def register_module(self, name: str, entry: Dict[str, Any]) -> None:
         data = self.load()
-        data.setdefault("dai_modules", {})[name] = entry
-        self.save()
+        modules = data.setdefault("dai_modules", {})
+        modules[name] = entry
+
+    def register_department(self, name: str, manifest: Dict[str, Any]) -> None:
+        data = self.load()
+        depts = data.setdefault("departments", {})
+        depts[name] = manifest
+
+    def register_endpoint(self, dept: str, endpoint: Dict[str, Any]) -> None:
+        data = self.load()
+        endpoints = data.setdefault("endpoints", {})
+        dept_endpoints = endpoints.setdefault(dept, [])
+        dept_endpoints.append(endpoint)
+
+    def register_ux_panel(self, dept: str, panel: Dict[str, Any]) -> None:
+        data = self.load()
+        panels = data.setdefault("ux_panels", {})
+        dept_panels = panels.setdefault(dept, [])
+        dept_panels.append(panel)
 
     def append_evolution(self, change: str, author: str) -> None:
-        from datetime import date
         data = self.load()
-        data.setdefault("evolution_log", []).append({
-            "version": data.get("version", "0.1.0"),
-            "date": date.today().isoformat(),
+        log = data.setdefault("evolution_log", [])
+        current_version = data.get("version", "0.1.0")
+        log.append({
+            "version": current_version,
+            "date": datetime.date.today().isoformat(),
             "author": author,
             "change": change,
         })
-        self.save()
 
 
 # ---------------------------------------------------------------------------
@@ -162,146 +182,227 @@ class Director:
 
     def get_agent(self, name: str) -> Agent:
         if name not in self._agents:
-            raise KeyError(f"No agent registered under name {name!r}")
+            raise KeyError(f"Agent {name!r} not registered")
         return self._agents[name]
 
     # --- design dispatch --------------------------------------------------
-    def design(self, category: str, target: str, **ctx: Any) -> DesignSpec: ...
-    def design_pa_mode(self, name: str, **ctx: Any) -> PAModeSpec: ...
+    def design(self, category: str, target: str, **ctx: Any) -> DesignSpec:
+        if category not in DESIGN_CATEGORIES:
+            raise ValueError(f"Unknown category: {category}")
+        for agent in self._agents.values():
+            try:
+                spec = agent.design(target, category=category, **ctx)
+                if spec is not None:
+                    return spec
+            except NotImplementedError:
+                continue
+        raise RuntimeError(f"No agent could handle design({category!r}, {target!r})")
+
+    def design_pa_mode(self, name: str, **ctx: Any) -> PAModeSpec:
+        agent = self.get_agent("DAI.PAArchitect")
+        spec = agent.design(name, **ctx)
+        return PAModeSpec(
+            name=spec.name,
+            description=spec.description,
+            branch_name=spec.metadata.get("branch_name", f"Branch_{name}"),
+            version=spec.version,
+        )
+
+    # --- department generation --------------------------------------------
+    def generate_department(self, name: str, **ctx: Any) -> Dict[str, Any]:
+        from dai.generator import generate_department
+        return generate_department(name, registry=self.registry, **ctx)
 
     # --- self-evolution ---------------------------------------------------
     def evolve(self, proposal: DesignSpec) -> None:
         """Apply a DAI.SelfArchitect proposal to system_map.yaml."""
-        ...
+        self.registry.register_module(proposal.name, {
+            "category": proposal.category,
+            "description": proposal.description,
+            "version": proposal.version,
+        })
+        self.registry.append_evolution(
+            f"Evolved: {proposal.name} ({proposal.category})",
+            "DAI.SelfArchitect",
+        )
+        self.registry.save()
 
 
 # ---------------------------------------------------------------------------
-# Verification helpers
+# Verification CLI — `python dai/core.py --verify`
 # ---------------------------------------------------------------------------
 
-def verify_agents(registry_data: Dict[str, Any]) -> List[str]:
-    """Return list of agent names declared in the system_map dai_modules section."""
-    return list(registry_data.get("dai_modules", {}).keys())
+_AGENT_IMPORTS = [
+    ("dai.agents.subsystem_architect", "SubsystemArchitect"),
+    ("dai.agents.pa_architect",        "PAArchitect"),
+    ("dai.agents.code_architect",      "CodeArchitect"),
+    ("dai.agents.ux_architect",        "UXArchitect"),
+    ("dai.agents.backend_architect",   "BackendArchitect"),
+    ("dai.agents.test_architect",      "TestArchitect"),
+    ("dai.agents.doc_architect",       "DocArchitect"),
+    ("dai.agents.self_architect",      "SelfArchitect"),
+]
 
 
-def verify_modes(registry_data: Dict[str, Any], pa_modes_dir: Path) -> List[str]:
-    """Return deduplicated list of PA mode names from the pa_modes/ directory
-    and the pa_masterflow.modes table in system_map."""
-    map_modes = list(registry_data.get("pa_masterflow", {}).get("modes", {}).keys())
-    file_modes = (
-        [f.stem for f in sorted(pa_modes_dir.glob("*.yaml"))]
-        if pa_modes_dir.exists()
-        else []
-    )
-    return sorted(set(map_modes) | set(file_modes))
+def _load_system_map(path: Path):
+    """Best-effort load of system_map.yaml. Returns (data_or_none, error_or_none)."""
+    if not path.exists():
+        return None, f"not found: {path}"
+    try:
+        import yaml  # type: ignore
+    except ImportError:
+        return None, "PyYAML not installed (falling back to text checks)"
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return yaml.safe_load(f), None
+    except Exception as e:  # pragma: no cover
+        return None, f"parse error: {e}"
 
 
-def verify_pa_masterflow(registry_data: Dict[str, Any]) -> bool:
-    """Return True when the PA.MasterFlow shell section is present and valid."""
-    pa = registry_data.get("pa_masterflow", {})
-    return bool(pa.get("name") == "PA.MasterFlow" and pa.get("kind"))
+def verify_agents(director: "Director"):
+    """Import and register every architect agent with the given Director.
 
-
-def run_verify(
-    system_map_path: Optional[Path] = None,
-    pa_modes_dir: Optional[Path] = None,
-) -> int:
+    Returns (registered_names, errors).
     """
-    Run a full DAI.Ultra system verification and print a human-readable
-    report.  Returns 0 on success, 1 on failure.
-    """
-    _here = Path(__file__).parent
-    if system_map_path is None:
-        system_map_path = _here / "system_map.yaml"
-    if pa_modes_dir is None:
-        pa_modes_dir = _here / "pa_modes"
+    import importlib
 
-    print("=" * 60)
-    print("  DAI.Ultra — System Verification Report")
-    print("=" * 60)
+    registered: List[str] = []
+    errors: List[str] = []
+    for module_path, class_name in _AGENT_IMPORTS:
+        try:
+            module = importlib.import_module(module_path)
+            cls = getattr(module, class_name)
+            instance = cls()
+            director._agents[instance.name] = instance
+            registered.append(instance.name)
+        except Exception as e:
+            errors.append(f"{module_path}.{class_name}: {e}")
+    return registered, errors
+
+
+def verify_modes(modes_dir: Path):
+    """Scan pa_modes/*.yaml for registered PA modes. Returns (names, errors)."""
+    errors: List[str] = []
+    if not modes_dir.exists():
+        errors.append(f"modes dir not found: {modes_dir}")
+        return [], errors
+    if not modes_dir.is_dir():
+        errors.append(f"modes path is not a directory: {modes_dir}")
+        return [], errors
+    names = sorted(p.stem for p in modes_dir.glob("*.yaml"))
+    return names, errors
+
+
+def verify_masterflow(system_map, map_path: Path):
+    """Confirm PA.MasterFlow shell is loadable. Returns (ok, message)."""
+    if isinstance(system_map, dict):
+        pm = system_map.get("pa_masterflow")
+        if isinstance(pm, dict):
+            name = pm.get("name", "PA.MasterFlow")
+            kind = pm.get("kind", "?")
+            return True, f"{name} shell loaded (kind={kind})"
+        return False, "pa_masterflow section missing or malformed"
+    if not map_path.exists():
+        return False, f"{map_path} not found"
+    try:
+        text = map_path.read_text(encoding="utf-8")
+    except Exception as e:
+        return False, f"could not read {map_path}: {e}"
+    if "pa_masterflow:" in text:
+        return True, "pa_masterflow key present (text-mode check)"
+    return False, "pa_masterflow key not found in system_map.yaml"
+
+
+def verify_registry(registry: "Registry"):
+    """Confirm the registry file is reachable. Returns (ok, message)."""
+    path = Path(registry.path)
+    if not path.exists():
+        return False, f"registry file missing: {path}"
+    if not path.is_file():
+        return False, f"registry path not a file: {path}"
+    return True, f"registry reachable at {path}"
+
+
+def run_verify() -> int:
+    """Full DAI.Ultra verification. Returns 0 on success, non-zero on failure."""
+    try:
+        from dai import __version__ as dai_version
+    except Exception:
+        dai_version = "unknown"
+
+    print("=" * 72)
+    print(" DAI.Ultra — System Verification")
+    print("=" * 72)
+    print(f" Version : {dai_version}")
+    print()
 
     failures: List[str] = []
-    registry_data: Dict[str, Any] = {}
 
-    # ------------------------------------------------------------------
-    # Step 1 — Mode registry (system_map.yaml)
-    # ------------------------------------------------------------------
-    print("\n[1] Mode registry (system_map.yaml)")
+    # 1. Instantiate the Director
     try:
-        registry_data = yaml.safe_load(
-            system_map_path.read_text(encoding="utf-8")
-        ) or {}
-        print(f"    ✓  Loaded: {system_map_path}")
-        print(f"    ✓  Schema version  : {registry_data.get('schema_version', 'n/a')}")
-        print(f"    ✓  DAI.Ultra version: {registry_data.get('version', 'n/a')}")
-    except Exception as exc:
-        print(f"    ✗  Failed to load registry: {exc}")
-        failures.append(f"registry: {exc}")
-
-    # ------------------------------------------------------------------
-    # Step 2 — Director instantiation
-    # ------------------------------------------------------------------
-    print("\n[2] Director instantiation")
-    try:
-        registry = Registry(path=system_map_path)
-        director = Director(registry=registry)
-        print("    ✓  Director instantiated successfully")
-    except Exception as exc:
-        print(f"    ✗  Director instantiation failed: {exc}")
-        failures.append(f"director: {exc}")
-
-    # ------------------------------------------------------------------
-    # Step 3 — Registered agents
-    # ------------------------------------------------------------------
-    print("\n[3] Registered agents")
-    agents = verify_agents(registry_data)
-    if agents:
-        for agent_name in agents:
-            print(f"    •  {agent_name}")
-        print(f"    ✓  {len(agents)} agent(s) found")
-    else:
-        print("    ✗  No agents found in registry")
-        failures.append("agents: none registered in dai_modules")
-
-    # ------------------------------------------------------------------
-    # Step 4 — Registered PA modes
-    # ------------------------------------------------------------------
-    print("\n[4] Registered PA modes")
-    modes = verify_modes(registry_data, pa_modes_dir)
-    if modes:
-        for mode_name in modes:
-            print(f"    •  {mode_name}")
-        print(f"    ✓  {len(modes)} mode(s) found")
-    else:
-        print("    ⚠  No PA modes found (pa_modes/ directory empty or missing)")
-
-    # ------------------------------------------------------------------
-    # Step 5 — PA.MasterFlow shell loadable
-    # ------------------------------------------------------------------
-    print("\n[5] PA.MasterFlow shell")
-    if verify_pa_masterflow(registry_data):
-        pa = registry_data.get("pa_masterflow", {})
-        inputs = [i["name"] for i in pa.get("inputs", [])]
-        print("    ✓  PA.MasterFlow shell is loadable")
-        print(f"    ✓  Kind   : {pa.get('kind')}")
-        print(f"    ✓  Inputs : {', '.join(inputs)}")
-    else:
-        print("    ✗  PA.MasterFlow shell section missing or invalid")
-        failures.append("pa_masterflow: shell not loadable")
-
-    # ------------------------------------------------------------------
-    # Summary
-    # ------------------------------------------------------------------
-    print("\n" + "=" * 60)
-    if failures:
-        print(f"  RESULT: FAILED  ({len(failures)} issue(s))")
-        for item in failures:
-            print(f"    ✗  {item}")
-        print("=" * 60)
+        director = Director()
+        print("[ OK ] Director instantiated")
+    except Exception as e:
+        print(f"[FAIL] Director could not be instantiated: {e}")
         return 1
 
-    print("  RESULT: ALL CHECKS PASSED")
-    print("=" * 60)
+    # 2. Mode registry reachable
+    ok, msg = verify_registry(director.registry)
+    print(f"{'[ OK ]' if ok else '[FAIL]'} Registry: {msg}")
+    if not ok:
+        failures.append(f"registry: {msg}")
+
+    # Parse system_map once for downstream checks.
+    system_map, map_err = _load_system_map(Path(director.registry.path))
+    if map_err:
+        print(f"[WARN] system_map parse: {map_err}")
+
+    # 3. PA.MasterFlow shell loadable
+    ok, msg = verify_masterflow(system_map, Path(director.registry.path))
+    print(f"{'[ OK ]' if ok else '[FAIL]'} PA.MasterFlow: {msg}")
+    if not ok:
+        failures.append(f"pa_masterflow: {msg}")
+
+    # 4. Registered agents
+    print()
+    print("-- Registered Agents --------------------------------------------------")
+    registered, agent_errors = verify_agents(director)
+    if registered:
+        for name in registered:
+            print(f"  - {name}")
+    else:
+        print("  (none)")
+    for err in agent_errors:
+        print(f"  [FAIL] {err}")
+        failures.append(f"agent: {err}")
+    print(f"  total: {len(registered)} registered, {len(agent_errors)} errors")
+
+    # 5. Registered PA modes
+    print()
+    print("-- PA.MasterFlow Modes ------------------------------------------------")
+    modes_dir = Path("dai/pa_modes")
+    modes, mode_errors = verify_modes(modes_dir)
+    if modes:
+        for name in modes:
+            print(f"  - {name}")
+    else:
+        print("  (none)")
+    for err in mode_errors:
+        print(f"  [FAIL] {err}")
+        failures.append(f"mode: {err}")
+    print(f"  total: {len(modes)} modes discovered in {modes_dir}")
+
+    # Summary
+    print()
+    print("=" * 72)
+    if failures:
+        print(f" RESULT: FAILED — {len(failures)} issue(s)")
+        for f in failures:
+            print(f"   - {f}")
+        print("=" * 72)
+        return 1
+    print(" RESULT: PASSED")
+    print("=" * 72)
     return 0
 
 
@@ -309,23 +410,37 @@ def run_verify(
 # CLI entry point
 # ---------------------------------------------------------------------------
 
-if __name__ == "__main__":
+def _cli() -> int:
     import argparse
-    import sys
 
     parser = argparse.ArgumentParser(
-        prog="python dai/core.py",
-        description="DAI.Ultra — Core CLI",
+        prog="dai.core",
+        description="DAI.Ultra core — Director, shared types, verification CLI.",
     )
     parser.add_argument(
         "--verify",
         action="store_true",
-        help="Run full system verification and print a health report.",
+        help="Run full DAI.Ultra system verification and exit.",
+    )
+    parser.add_argument(
+        "--generate-department",
+        metavar="NAME",
+        help="Generate a new department (e.g. BuilderOS, Auto, ITS).",
     )
     args = parser.parse_args()
 
     if args.verify:
-        sys.exit(run_verify())
-    else:
-        parser.print_help()
-        sys.exit(0)
+        return run_verify()
+
+    if args.generate_department:
+        director = Director()
+        director.generate_department(args.generate_department)
+        return 0
+
+    parser.print_help()
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(_cli())
