@@ -1,0 +1,169 @@
+{
+  "version": "1.0.0",
+  "device_scope": "MacBook Pro 2010 (A1278 / A1286)",
+  "description": "Known failure signatures for 2010 MacBook Pro SATA cable and related boot issues",
+  "patterns": [
+    {
+      "id": "P001",
+      "name": "SATA Cable Failure — Classic",
+      "severity": "high",
+      "confidence_weight": 0.90,
+      "keywords": [
+        "folder with question mark",
+        "flashing question mark",
+        "no bootable device",
+        "missing operating system",
+        "boot0 error"
+      ],
+      "vision_keywords": [
+        "question mark",
+        "flashing folder",
+        "?",
+        "folder icon"
+      ],
+      "description": "The SATA ribbon cable connecting the HDD to the logic board has failed or degraded. The Mac cannot detect the internal drive at boot time.",
+      "root_cause": "Worn or cracked 821-0814-A / 821-1226-A SATA ribbon cable causing intermittent or total loss of drive connectivity.",
+      "repair_steps": [
+        "Boot into Internet Recovery (Cmd+Opt+R) to confirm drive is not detected in Disk Utility.",
+        "Connect an external USB drive with macOS — if it boots, the internal SATA cable is suspect.",
+        "Replace the SATA ribbon cable (821-0814-A for 13-inch, 821-1226-A for 15-inch).",
+        "Reseat the HDD connector on both the logic board and the drive before ordering parts.",
+        "After cable replacement, reinstall macOS via Recovery Mode."
+      ],
+      "parts_needed": ["821-0814-A SATA cable (13-inch) OR 821-1226-A SATA cable (15-inch)"],
+      "references": [
+        "https://www.ifixit.com/Guide/MacBook+Pro+13-Inch+Unibody+Mid+2010+Hard+Drive+Replacement/4305",
+        "https://apple.stackexchange.com/questions/tagged/sata-cable"
+      ]
+    },
+    {
+      "id": "P002",
+      "name": "Kernel Panic — Drive I/O Error",
+      "severity": "high",
+      "confidence_weight": 0.80,
+      "keywords": [
+        "kernel panic",
+        "com.apple.iokit.iobluetooth",
+        "com.apple.driver.AppleAHCIPort",
+        "disk0s2",
+        "i/o error",
+        "disk utility error"
+      ],
+      "vision_keywords": [
+        "kernel panic",
+        "you need to restart",
+        "restart your computer"
+      ],
+      "description": "Repeated kernel panics caused by AHCI port errors — the drive is losing connectivity mid-session rather than at cold boot.",
+      "root_cause": "Intermittent SATA cable failure causing I/O errors that trigger kernel panics. Correlates with heat (cable near GPU exhaust) or physical flex.",
+      "repair_steps": [
+        "Run Apple Diagnostics (D at boot) — look for HDD or storage errors.",
+        "In Terminal: 'sudo fsck -fy /dev/disk0s2' to check filesystem integrity.",
+        "Check /var/log/system.log for AppleAHCIPort errors.",
+        "Replace SATA cable. If panics persist after cable replacement, test HDD with SMART tools.",
+        "Consider replacing HDD with an SSD — eliminates mechanical failure and reduces cable stress."
+      ],
+      "parts_needed": ["821-0814-A or 821-1226-A SATA cable", "Optional: replacement 2.5-inch SATA SSD"],
+      "references": [
+        "https://www.ifixit.com/Answers/View/145611/Hard+drive+causing+kernel+panics",
+        "https://discussions.apple.com/thread/kernel-panic-ahci"
+      ]
+    },
+    {
+      "id": "P003",
+      "name": "Prohibitory Symbol — OS Corruption",
+      "severity": "medium",
+      "confidence_weight": 0.70,
+      "keywords": [
+        "prohibitory symbol",
+        "circle with slash",
+        "no entry sign",
+        "prohibitory sign",
+        "cannot boot",
+        "corrupted system"
+      ],
+      "vision_keywords": [
+        "circle",
+        "slash",
+        "prohibitory",
+        "no entry"
+      ],
+      "description": "macOS detects the drive but cannot load a valid system from it. Caused by OS corruption, a missing System folder, or a SATA cable causing partial read errors.",
+      "root_cause": "Incomplete macOS installation, filesystem corruption, or cable-induced read errors during a prior write operation.",
+      "repair_steps": [
+        "Boot into Recovery Mode (Cmd+R) — if successful, the cable is likely functional.",
+        "Run First Aid in Disk Utility on the startup disk.",
+        "If disk appears healthy, reinstall macOS from Recovery.",
+        "If Disk Utility shows the disk as unmountable or with errors, suspect cable AND drive.",
+        "Replace SATA cable, then attempt recovery again."
+      ],
+      "parts_needed": ["821-0814-A or 821-1226-A SATA cable (if drive errors persist)"],
+      "references": [
+        "https://support.apple.com/en-us/102546"
+      ]
+    },
+    {
+      "id": "P004",
+      "name": "Spinning Globe / Slow Boot — EFI Fallback",
+      "severity": "low",
+      "confidence_weight": 0.55,
+      "keywords": [
+        "spinning globe",
+        "internet recovery",
+        "efi",
+        "netboot",
+        "very slow boot",
+        "globe icon"
+      ],
+      "vision_keywords": [
+        "globe",
+        "spinning",
+        "network",
+        "loading"
+      ],
+      "description": "The Mac is falling back to Internet Recovery or NetBoot, indicating the local drive was not detected at firmware level.",
+      "root_cause": "SATA cable not presenting the drive to EFI firmware; same root cause as P001 but the firmware falls back to network boot instead of showing a question mark.",
+      "repair_steps": [
+        "Allow Internet Recovery to load — then open Disk Utility to confirm drive visibility.",
+        "If drive is not shown in Disk Utility, SATA cable replacement is required.",
+        "If drive is shown but blank, reinstall macOS.",
+        "After cable replacement, reset NVRAM (Cmd+Opt+P+R) to clear boot device preference."
+      ],
+      "parts_needed": ["821-0814-A or 821-1226-A SATA cable"],
+      "references": [
+        "https://support.apple.com/en-us/102541"
+      ]
+    },
+    {
+      "id": "P005",
+      "name": "Clicking / Grinding HDD",
+      "severity": "critical",
+      "confidence_weight": 0.95,
+      "keywords": [
+        "clicking",
+        "grinding",
+        "clunking",
+        "head crash",
+        "mechanical noise",
+        "drive noise"
+      ],
+      "vision_keywords": [],
+      "description": "Mechanical hard drive failure — audible clicking or grinding indicates read head failure (click of death).",
+      "root_cause": "Physical HDD failure independent of, but worsened by, a degraded SATA cable causing repeated reconnection attempts.",
+      "repair_steps": [
+        "STOP — do not power cycle the drive. Continued spinning worsens head damage.",
+        "Data recovery must be prioritised: seek a professional data recovery service.",
+        "Replace the HDD with an SSD to eliminate mechanical failure risk entirely.",
+        "Replace the SATA cable simultaneously — cable degradation accelerates HDD wear.",
+        "Do not attempt to boot from the failing drive again."
+      ],
+      "parts_needed": [
+        "Replacement 2.5-inch SATA SSD (Samsung 860/870 EVO recommended)",
+        "821-0814-A or 821-1226-A SATA cable"
+      ],
+      "references": [
+        "https://www.ifixit.com/Guide/MacBook+Pro+13-Inch+Unibody+Mid+2010+Hard+Drive+Replacement/4305"
+      ]
+    }
+  ]
+}

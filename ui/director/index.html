@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Director-AI Diagnostics</title>
+    <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+    <header class="topbar">
+        <h1>Director-AI</h1>
+        <div class="status" id="status-bar">
+            <span id="backend-vision" class="pill">vision: …</span>
+            <span id="backend-web"    class="pill">web: …</span>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="panel input-panel">
+            <h2>Describe the problem</h2>
+
+            <label for="device-model">Device model (optional)</label>
+            <input
+                id="device-model"
+                type="text"
+                placeholder="e.g. MacBook Pro 2010 (13-inch)"
+                autocomplete="off" />
+
+            <label for="problem-text">Problem description</label>
+            <textarea
+                id="problem-text"
+                rows="6"
+                placeholder="What is the device doing? Any error messages, sounds, or LEDs?"></textarea>
+
+            <label for="image-input" class="file-drop" id="drop-zone">
+                <span id="drop-label">Drop screen photos here, or click to upload</span>
+                <input
+                    id="image-input"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    hidden />
+            </label>
+
+            <div id="preview-grid" class="preview-grid"></div>
+
+            <button id="diagnose-btn" class="primary">Diagnose</button>
+        </section>
+
+        <section class="panel result-panel" id="result-panel" hidden>
+            <h2>Diagnosis</h2>
+
+            <div class="result-row">
+                <div class="result-block">
+                    <div class="label">Domain</div>
+                    <div id="r-domain" class="value">—</div>
+                </div>
+                <div class="result-block">
+                    <div class="label">Confidence</div>
+                    <div id="r-confidence" class="value">—</div>
+                </div>
+                <div class="result-block">
+                    <div class="label">Severity</div>
+                    <div id="r-severity" class="value">—</div>
+                </div>
+            </div>
+
+            <div class="result-section">
+                <h3>Summary</h3>
+                <p id="r-summary">—</p>
+            </div>
+
+            <div class="result-section">
+                <h3>Evidence</h3>
+                <ul id="r-evidence"></ul>
+            </div>
+
+            <div class="result-section">
+                <h3>Recommended actions</h3>
+                <ol id="r-actions"></ol>
+            </div>
+
+            <div class="result-section" id="r-parts-wrap" hidden>
+                <h3>Parts needed</h3>
+                <ul id="r-parts"></ul>
+            </div>
+
+            <div class="result-section" id="r-refs-wrap" hidden>
+                <h3>References</h3>
+                <ul id="r-refs"></ul>
+            </div>
+
+            <details class="raw">
+                <summary>Raw JSON</summary>
+                <pre id="r-raw"></pre>
+            </details>
+        </section>
+
+        <section class="panel" id="error-panel" hidden>
+            <h2>Error</h2>
+            <pre id="error-msg"></pre>
+        </section>
+    </main>
+
+    <script src="./app.js"></script>
+</body>
+</html>

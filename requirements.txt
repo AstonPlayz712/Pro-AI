@@ -1,0 +1,17 @@
+# --- Director-AI runtime ---------------------------------------------------
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+python-dotenv>=1.0
+
+# --- Vision / LLM providers (optional; install what you use) ---------------
+# anthropic>=0.40
+# openai>=1.40
+# google-generativeai>=0.7    # Gemini
+# pillow>=10.0                # required by google-generativeai for image input
+
+# --- Web backends (optional) -----------------------------------------------
+requests>=2.31
+beautifulsoup4>=4.12
+# duckduckgo-search>=5.0
+# Brave Search and Google CSE use plain `requests` — no extra SDK needed.
