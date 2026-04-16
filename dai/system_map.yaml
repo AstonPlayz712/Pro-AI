@@ -1,0 +1,158 @@
+# =============================================================================
+# DAI.Ultra — system_map.yaml
+# -----------------------------------------------------------------------------
+# Single source of truth for DAI.Ultra.
+# Owned by: DAI.SelfArchitect (proposes changes), DAI.Core (validates).
+# Convention:
+#   - Every subsystem / agent / flow / mode / tool MUST appear here.
+#   - Names use PascalCase for modules/agents, snake_case for files.
+#   - Version bumps follow semver; bump minor on new component, major on
+#     breaking contract change.
+# =============================================================================
+version: "0.1.0"
+generated_by: "DAI.Ultra (claude-opus-4-7)"
+schema_version: 1
+
+# -----------------------------------------------------------------------------
+# DAI internal modules (the Director itself)
+# -----------------------------------------------------------------------------
+dai_modules:
+
+  DAI.Core:
+    file: dai/core.py
+    role: "Core types, shared utilities, Director interface, registry lookup."
+    exports:
+      - Director
+      - DesignSpec
+      - PAModeSpec
+      - Registry
+    depends_on: []
+
+  DAI.SubsystemArchitect:
+    file: dai/agents/subsystem_architect.py
+    role: "Designs subsystems (backend, UX, automation, tools, tests, docs)."
+    produces: [DesignSpec]
+    depends_on: [DAI.Core]
+
+  DAI.PAArchitect:
+    file: dai/agents/pa_architect.py
+    role: "Designs PA.MasterFlow Modes: routing, validation, branches, helpers."
+    produces: [PAModeSpec]
+    depends_on: [DAI.Core]
+
+  DAI.CodeArchitect:
+    file: dai/agents/code_architect.py
+    role: "Designs multi-file code layouts; hands specs to Claude Code."
+    produces: [DesignSpec]
+    depends_on: [DAI.Core, DAI.SubsystemArchitect]
+
+  DAI.UXArchitect:
+    file: dai/agents/ux_architect.py
+    role: "Designs UX flows, screens, and states (Device Maker, game pipeline)."
+    produces: [DesignSpec]
+    depends_on: [DAI.Core]
+
+  DAI.BackendArchitect:
+    file: dai/agents/backend_architect.py
+    role: "Designs backend endpoints, services, integration contracts."
+    produces: [DesignSpec]
+    depends_on: [DAI.Core]
+
+  DAI.TestArchitect:
+    file: dai/agents/test_architect.py
+    role: "Designs test plans and validation harnesses for every spec."
+    produces: [DesignSpec]
+    depends_on: [DAI.Core]
+
+  DAI.DocArchitect:
+    file: dai/agents/doc_architect.py
+    role: "Designs docs: READMEs, developer guides, spec-to-doc bridges."
+    produces: [DesignSpec]
+    depends_on: [DAI.Core]
+
+  DAI.SelfArchitect:
+    file: dai/agents/self_architect.py
+    role: "Designs new DAI modules/agents; proposes system_map.yaml edits."
+    produces: [DesignSpec]
+    depends_on: [DAI.Core]
+    privileges: [edit_system_map]
+
+# -----------------------------------------------------------------------------
+# External subsystems DAI integrates with
+# -----------------------------------------------------------------------------
+subsystems:
+
+  ProAIRepo:
+    kind: repository
+    path: "."
+    role: "Code, scripts, configs for the Pro-AI project."
+
+  DeviceMakerUX:
+    kind: ux_pipeline
+    path: "ui/"
+    role: "Device Maker UX / game pipeline front-end."
+
+  ProAIBackend:
+    kind: backend
+    path: "src/backend/"
+    role: "Python backend services and tool runners."
+
+# -----------------------------------------------------------------------------
+# PA.MasterFlow — Power Automate Desktop flow
+# -----------------------------------------------------------------------------
+pa_masterflow:
+  name: PA.MasterFlow
+  kind: power_automate_desktop
+  powerfx_enabled: true
+
+  inputs:
+    - { name: Mode,   type: string, required: true  }
+    - { name: Param1, type: string, required: false }
+    - { name: Param2, type: string, required: false }
+    - { name: Param3, type: string, required: false }
+
+  outputs:
+    - { name: OutputMessage, type: string  }
+    - { name: OutputPath,    type: string  }
+    - { name: HasError,      type: boolean }
+
+  # Router: `Mode` -> Branch_<Name>. Power Fx Switch() table.
+  routing_table_var: "ModeRoutes"    # Power Fx Table of routing entries
+  default_branch: "Branch_Unknown"
+
+  modes: {}   # populated by DAI.PAArchitect; see pa_modes/ for specs
+
+# -----------------------------------------------------------------------------
+# Helper scripts registry (PowerShell, Python, etc.)
+# -----------------------------------------------------------------------------
+helper_scripts: {}   # populated as Modes are designed
+
+# -----------------------------------------------------------------------------
+# Tools & external services
+# -----------------------------------------------------------------------------
+tools:
+  ClaudeCode:
+    kind: code_generator
+    role: "Generates real files from CodeArchitect specs."
+  Git:
+    kind: vcs
+    role: "Version control for Pro-AI repo."
+
+# -----------------------------------------------------------------------------
+# UX panels (Device Maker, DAI Console, etc.)
+# -----------------------------------------------------------------------------
+ux_panels: {}   # populated by DAI.UXArchitect
+
+# -----------------------------------------------------------------------------
+# Backend endpoints
+# -----------------------------------------------------------------------------
+endpoints: {}   # populated by DAI.BackendArchitect
+
+# -----------------------------------------------------------------------------
+# Evolution log — every DAI.SelfArchitect change lands here
+# -----------------------------------------------------------------------------
+evolution_log:
+  - version: "0.1.0"
+    date: "2026-04-16"
+    author: "DAI.SelfArchitect"
+    change: "Initial bootstrap: 9 DAI modules, PA.MasterFlow shell, CheckDisk mode."
