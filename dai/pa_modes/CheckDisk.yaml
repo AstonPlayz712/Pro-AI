@@ -1,0 +1,74 @@
+# =============================================================================
+# PAModeSpec — CheckDisk
+# -----------------------------------------------------------------------------
+# Runs disk-health checks via a PowerShell helper and returns a summary path.
+# Emitted by: DAI.PAArchitect
+# =============================================================================
+name: CheckDisk
+description: >
+  Collect SMART attributes, free-space %, and (optionally) run CHKDSK in
+  read-only mode against a target drive. Returns a path to a markdown report.
+version: "0.1.0"
+
+# Which of PA.MasterFlow's Param1..Param3 this Mode needs.
+required_params:
+  - Param1   # DriveLetter, e.g. "C"
+
+# Power Fx Switch() routing entry. Append this line to ModeRoutes in PA.
+powerfx_routing_entry: '{ Mode: "CheckDisk", Branch: "Branch_CheckDisk" },'
+
+# Power Fx validation. Evaluated before the branch runs; if false, HasError=true
+# and OutputMessage is set to "CheckDisk: Param1 (drive letter) is required".
+powerfx_validation: |
+  And(
+    Not(IsBlank(Param1)),
+    Len(Trim(Param1)) >= 1,
+    Len(Trim(Param1)) <= 2,
+    IsMatch(Trim(Param1), "^[A-Za-z]:?$")
+  )
+
+branch_name: Branch_CheckDisk
+
+# High-level PAD steps for the branch. Each line -> one PAD action group.
+steps:
+  - "Set %DriveLetter% to Upper(Left(Trim(Param1), 1))"
+  - "Set %ReportDir% to %USERPROFILE%\\DAI\\reports\\CheckDisk"
+  - "Create folder %ReportDir% if not exists"
+  - "Set %Timestamp% to Text(Now(), 'yyyyMMdd_HHmmss')  (via Power Fx)"
+  - "Set %ReportPath% to %ReportDir%\\CheckDisk_%DriveLetter%_%Timestamp%.md"
+  - "Run PowerShell: scripts\\pa\\check_disk.ps1 -Drive %DriveLetter% -Out %ReportPath%"
+  - "If %ScriptExitCode% <> 0: set HasError=true, OutputMessage='CheckDisk failed: ' & %ScriptStdErr%"
+  - "Else: set HasError=false, OutputMessage='CheckDisk OK for ' & %DriveLetter%"
+  - "Set OutputPath to %ReportPath%"
+
+# Helper scripts this Mode depends on (registered in system_map.helper_scripts).
+helper_scripts:
+  - path: scripts/pa/check_disk.ps1
+    kind: powershell
+    role: "Runs Get-PhysicalDisk / Get-Volume / optional CHKDSK and writes MD."
+    args: ["-Drive <letter>", "-Out <path>"]
+    exit_codes:
+      0: "ok"
+      1: "drive not found"
+      2: "access denied"
+      3: "chkdsk failed"
+
+# Test ideas. DAI.TestArchitect will expand these into a real harness.
+test_ideas:
+  - "Happy path: Param1='C', valid drive, exit 0, report file exists, HasError=false."
+  - "Invalid drive: Param1='Z9', validation fails, HasError=true, no script run."
+  - "Missing drive: Param1='', validation fails with clear message."
+  - "Access denied: simulated exit 2, OutputMessage contains 'access denied'."
+  - "Report content: report file is non-empty markdown with a SMART table."
+  - "Idempotency: running twice in same second produces unique report filenames."
+
+# What to add to system_map.yaml when this Mode is accepted.
+system_map_patch:
+  pa_masterflow.modes.CheckDisk:
+    branch: Branch_CheckDisk
+    required_params: [Param1]
+    helper_scripts: [scripts/pa/check_disk.ps1]
+    version: "0.1.0"
+  helper_scripts.scripts/pa/check_disk.ps1:
+    kind: powershell
+    used_by: [CheckDisk]
