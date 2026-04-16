@@ -77,6 +77,31 @@ dai_modules:
     depends_on: [DAI.Core]
     privileges: [edit_system_map]
 
+  DAI.DepartmentGenerator:
+    file: dai/generator/department_generator.py
+    role: "Generates new departments with folder structure, manifests, and registry entries."
+    depends_on: [DAI.Core]
+
+  DAI.SubAIGenerator:
+    file: dai/generator/subai_generator.py
+    role: "Generates Sub-AI modules for departments with reasoning/planning/execution/memory/tools stubs."
+    depends_on: [DAI.Core, DAI.DepartmentGenerator]
+
+  DAI.BackendGenerator:
+    file: dai/generator/backend_generator.py
+    role: "Generates FastAPI routers and endpoints for departments."
+    depends_on: [DAI.Core, DAI.DepartmentGenerator]
+
+  DAI.SystemMapGenerator:
+    file: dai/generator/system_map_generator.py
+    role: "Generates per-department system_map.yaml with full topology."
+    depends_on: [DAI.Core, DAI.DepartmentGenerator]
+
+  DAI.UXGenerator:
+    file: dai/generator/ux_generator.py
+    role: "Generates UX panels, flows, animations, transitions, 3D layers, and Liquid Glass layers."
+    depends_on: [DAI.Core, DAI.DepartmentGenerator]
+
 # -----------------------------------------------------------------------------
 # External subsystems DAI integrates with
 # -----------------------------------------------------------------------------
