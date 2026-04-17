@@ -188,6 +188,7 @@ class Director:
         """Route a design request to the first agent that handles *category*."""
         for agent in self._agents.values():
             try:
+                logger.debug("Trying agent %s for category=%r", agent.name, category)
                 spec = agent.design(target, category=category, **ctx)
                 if spec is not None:
                     return spec
