@@ -1,0 +1,12 @@
+node_modules
+.svelte-kit
+build
+dist
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Root .gitignore ignores `lib/` (Python packaging). Un-ignore our SvelteKit lib.
+!src/lib/
+!src/lib/**

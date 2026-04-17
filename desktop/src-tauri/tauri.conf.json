@@ -1,0 +1,48 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "build": {
+    "beforeDevCommand": "npm --prefix ../webui run dev",
+    "beforeBuildCommand": "npm --prefix ../webui run build",
+    "devPath": "http://localhost:5173",
+    "distDir": "../../webui/build",
+    "withGlobalTauri": false
+  },
+  "package": {
+    "productName": "Pro-AI Control",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": { "all": false, "open": true },
+      "http": {
+        "all": true,
+        "request": true,
+        "scope": ["http://127.0.0.1:8000/*", "http://localhost:8000/*"]
+      }
+    },
+    "bundle": {
+      "active": true,
+      "identifier": "com.pro-ai.control",
+      "targets": "all",
+      "category": "DeveloperTool",
+      "shortDescription": "AutoLink + DAI control app",
+      "longDescription": "Desktop wrapper around the Pro-AI Control SvelteKit UI."
+    },
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8000 http://localhost:8000 ws://127.0.0.1:8000; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:"
+    },
+    "windows": [
+      {
+        "title": "Pro-AI Control",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true
+      }
+    ]
+  }
+}
