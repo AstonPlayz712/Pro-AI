@@ -8,7 +8,9 @@ from .mode_prompts import (
     BUILDER_PROMPT,
 )
 from .tone_registry import ToneDefinition, ToneRegistry, NewTone, register_tone
-from .projection import Goal, Subtask, TimelineEvent, ChipRef, HealthStatus, DAIProjection
+from .projection import (
+    Goal, Subtask, TimelineEvent, ChipRef, HealthStatus, DAIProjection,
+)
 from .al_protocol import (
     RequestType,
     DAIRequest,

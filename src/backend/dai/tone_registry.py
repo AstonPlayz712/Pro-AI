@@ -18,7 +18,7 @@ class ToneDefinition:
     Describes a single communication tone.
 
     All string attributes use a shared vocabulary of levels:
-    very_low | low | medium | high | very_high | neutral
+    very_low | low | medium | high | very_high | neutral | tight | loose
     """
 
     verbosity: str
