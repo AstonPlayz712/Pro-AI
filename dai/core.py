@@ -273,7 +273,7 @@ def verify_agents(director: "Director"):
             module = importlib.import_module(module_path)
             cls = getattr(module, class_name)
             instance = cls()
-            director._agents[instance.name] = instance
+            director.register_agent(instance)
             registered.append(instance.name)
         except Exception as e:
             errors.append(f"{module_path}.{class_name}: {e}")
@@ -302,6 +302,7 @@ def verify_masterflow(system_map, map_path: Path):
             kind = pm.get("kind", "?")
             return True, f"{name} shell loaded (kind={kind})"
         return False, "pa_masterflow section missing or malformed"
+    # YAML unavailable — text fallback so the check is still meaningful.
     if not map_path.exists():
         return False, f"{map_path} not found"
     try:
