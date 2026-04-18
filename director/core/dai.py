@@ -25,6 +25,7 @@ from director.core.schema import (
 )
 from director.tools.vision.interface import VisionInterface, NullVisionInterface
 from director.tools.web.interface import WebInterface, NullWebInterface
+from src.backend.dai.system_prompt import DAI_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ class DirectorAI:
         self.router      = router      or build_default_router()
         self.vision_tool = vision_tool or NullVisionInterface()
         self.web_tool    = web_tool    or NullWebInterface()
+        self.system_prompt: str = DAI_SYSTEM_PROMPT
         logger.info("DirectorAI initialised.")
 
     # ------------------------------------------------------------------
