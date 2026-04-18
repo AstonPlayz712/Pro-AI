@@ -1,4 +1,4 @@
-"""
+﻿"""
 DAI.Core — core types, registry, Director interface.
 
 This module defines the shared contracts every DAI agent speaks. Keep this
@@ -216,6 +216,7 @@ class Director:
     # --- self-evolution ---------------------------------------------------
     def evolve(self, proposal: DesignSpec) -> None:
         """Apply a DAI.SelfArchitect proposal to system_map.yaml."""
+<<<<<<< HEAD
         self.registry.register_module(proposal.name, {
             "category": proposal.category,
             "description": proposal.description,
@@ -226,6 +227,9 @@ class Director:
             "DAI.SelfArchitect",
         )
         self.registry.save()
+=======
+        ...
+>>>>>>> b049d595669b682c1447dc4be4e6487b73a0ac95
 
 
 # ---------------------------------------------------------------------------
@@ -273,7 +277,12 @@ def verify_agents(director: "Director"):
             module = importlib.import_module(module_path)
             cls = getattr(module, class_name)
             instance = cls()
-            director.register_agent(instance)
+<<<<<<< HEAD
+=======
+            # Director.register_agent is currently a stub; populate directly
+            # so verify output reflects actual registration state.
+>>>>>>> b049d595669b682c1447dc4be4e6487b73a0ac95
+            director._agents[instance.name] = instance
             registered.append(instance.name)
         except Exception as e:
             errors.append(f"{module_path}.{class_name}: {e}")
@@ -302,7 +311,10 @@ def verify_masterflow(system_map, map_path: Path):
             kind = pm.get("kind", "?")
             return True, f"{name} shell loaded (kind={kind})"
         return False, "pa_masterflow section missing or malformed"
+<<<<<<< HEAD
+=======
     # YAML unavailable — text fallback so the check is still meaningful.
+>>>>>>> b049d595669b682c1447dc4be4e6487b73a0ac95
     if not map_path.exists():
         return False, f"{map_path} not found"
     try:
@@ -407,10 +419,13 @@ def run_verify() -> int:
     return 0
 
 
+<<<<<<< HEAD
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
+=======
+>>>>>>> b049d595669b682c1447dc4be4e6487b73a0ac95
 def _cli() -> int:
     import argparse
 
@@ -423,21 +438,27 @@ def _cli() -> int:
         action="store_true",
         help="Run full DAI.Ultra system verification and exit.",
     )
+<<<<<<< HEAD
     parser.add_argument(
         "--generate-department",
         metavar="NAME",
         help="Generate a new department (e.g. BuilderOS, Auto, ITS).",
     )
+=======
+>>>>>>> b049d595669b682c1447dc4be4e6487b73a0ac95
     args = parser.parse_args()
 
     if args.verify:
         return run_verify()
 
+<<<<<<< HEAD
     if args.generate_department:
         director = Director()
         director.generate_department(args.generate_department)
         return 0
 
+=======
+>>>>>>> b049d595669b682c1447dc4be4e6487b73a0ac95
     parser.print_help()
     return 0
 

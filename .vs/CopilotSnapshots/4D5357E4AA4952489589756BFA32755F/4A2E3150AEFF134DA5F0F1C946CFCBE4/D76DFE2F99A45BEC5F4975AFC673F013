@@ -1,4 +1,4 @@
-"""
+﻿"""
 DAI.Core — core types, registry, Director interface.
 
 This module defines the shared contracts every DAI agent speaks. Keep this
