@@ -6,6 +6,7 @@
   const nav = [
     { href: '/autolink', label: 'AutoLink Dashboard' },
     { href: '/dai', label: 'DAI Dashboard' },
+    { href: '/maker', label: 'Maker' },
     { href: '/cities2', label: 'Cities2 Tools' }
   ];
 </script>

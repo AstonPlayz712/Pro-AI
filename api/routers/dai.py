@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from dai.interface import run_intelligence_task
+from dai.interface import make_something, run_intelligence_task
 
 router = APIRouter(prefix="/dai", tags=["dai"])
 
@@ -24,6 +24,14 @@ class RunRequest(BaseModel):
     sensitivity: str = "normal"
     complexity: str = "normal"
     latency_budget_ms: Optional[int] = None
+
+
+class MakeRequest(BaseModel):
+    goal: str
+    mode: Optional[str] = None
+    user_id: str
+    session_id: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 @router.post("/run")
@@ -40,6 +48,14 @@ def run(req: RunRequest) -> Dict[str, Any]:
             complexity=req.complexity,
             latency_budget_ms=req.latency_budget_ms,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/make")
+def make(req: MakeRequest) -> Dict[str, Any]:
+    try:
+        return make_something(req.model_dump(exclude_none=False))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -43,6 +43,25 @@ export interface RunResponse {
   result: EngineResult;
 }
 
+export type MakerMode = 'idea' | 'plan' | 'spec' | 'code_stub';
+
+export interface MakeRequest {
+  goal: string;
+  mode?: MakerMode | null;
+  user_id: string;
+  session_id?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface MakerInfo {
+  goal: string;
+  mode: string;
+}
+
+export interface MakeResponse extends RunResponse {
+  maker: MakerInfo;
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
@@ -66,6 +85,7 @@ export const api = {
   autolinkRun: (req: RunRequest) => post<RunResponse>('/autolink/run', req),
   autolinkPing: () => get<{ status: string; service: string }>('/autolink/ping'),
   daiRun: (req: RunRequest) => post<RunResponse>('/dai/run', req),
+  daiMake: (req: MakeRequest) => post<MakeResponse>('/dai/make', req),
   daiSystemMap: () => get<Record<string, unknown>>('/dai/system-map'),
   daiEvolutionLog: () => get<Record<string, unknown>>('/dai/evolution-log')
 };
