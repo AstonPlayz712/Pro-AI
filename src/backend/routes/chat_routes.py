@@ -7,6 +7,7 @@ from typing import List, Optional
 from src.config import get_settings
 from src.models import ModelRouter
 from src.memory import JSONMemory
+from src.backend.dai.system_prompt import DAI_SYSTEM_PROMPT
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -77,6 +78,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             model=request.model,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
+            system_prompt=DAI_SYSTEM_PROMPT,
         )
 
         # Check for errors

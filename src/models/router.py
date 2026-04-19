@@ -23,6 +23,7 @@ class ModelRouter:
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 2000,
+        system_prompt: Optional[str] = None,
     ) -> dict:
         """
         Send a chat request to the selected model.
@@ -32,6 +33,7 @@ class ModelRouter:
             model: Model provider name (openai, anthropic, google, ollama)
             temperature: Temperature for generation
             max_tokens: Maximum tokens to generate
+            system_prompt: Optional system-level instruction prepended to every request
 
         Returns:
             Response dictionary with model output
@@ -40,17 +42,23 @@ class ModelRouter:
             model = self.config.get("default_model", "openai")
 
         if model == "openai":
-            return await self._chat_openai(messages, temperature, max_tokens)
+            return await self._chat_openai(messages, temperature, max_tokens, system_prompt)
         elif model == "anthropic":
-            return await self._chat_anthropic(messages, temperature, max_tokens)
+            return await self._chat_anthropic(messages, temperature, max_tokens, system_prompt)
         elif model == "google":
-            return await self._chat_google(messages, temperature, max_tokens)
+            return await self._chat_google(messages, temperature, max_tokens, system_prompt)
         elif model == "ollama":
-            return await self._chat_ollama(messages, temperature, max_tokens)
+            return await self._chat_ollama(messages, temperature, max_tokens, system_prompt)
         else:
             return {"error": f"Unknown model: {model}"}
 
-    async def _chat_openai(self, messages: list, temperature: float, max_tokens: int) -> dict:
+    async def _chat_openai(
+        self,
+        messages: list,
+        temperature: float,
+        max_tokens: int,
+        system_prompt: Optional[str] = None,
+    ) -> dict:
         """Chat with OpenAI API"""
         try:
             import openai
@@ -58,9 +66,13 @@ class ModelRouter:
             openai.api_key = self.config.get("openai", {}).get("api_key")
             model_name = self.config.get("openai", {}).get("model", "gpt-4")
 
+            messages_with_system = messages
+            if system_prompt:
+                messages_with_system = [{"role": "system", "content": system_prompt}] + messages
+
             response = await openai.ChatCompletion.acreate(
                 model=model_name,
-                messages=messages,
+                messages=messages_with_system,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
@@ -73,7 +85,13 @@ class ModelRouter:
         except Exception as e:
             return {"error": f"OpenAI error: {str(e)}"}
 
-    async def _chat_anthropic(self, messages: list, temperature: float, max_tokens: int) -> dict:
+    async def _chat_anthropic(
+        self,
+        messages: list,
+        temperature: float,
+        max_tokens: int,
+        system_prompt: Optional[str] = None,
+    ) -> dict:
         """Chat with Anthropic API"""
         try:
             from anthropic import AsyncAnthropic
@@ -83,12 +101,16 @@ class ModelRouter:
 
             client = AsyncAnthropic(api_key=api_key)
 
-            response = await client.messages.create(
-                model=model_name,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                messages=messages,
-            )
+            create_kwargs: dict = {
+                "model": model_name,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": messages,
+            }
+            if system_prompt:
+                create_kwargs["system"] = system_prompt
+
+            response = await client.messages.create(**create_kwargs)
 
             return {
                 "model": "anthropic",
@@ -101,7 +123,13 @@ class ModelRouter:
         except Exception as e:
             return {"error": f"Anthropic error: {str(e)}"}
 
-    async def _chat_google(self, messages: list, temperature: float, max_tokens: int) -> dict:
+    async def _chat_google(
+        self,
+        messages: list,
+        temperature: float,
+        max_tokens: int,
+        system_prompt: Optional[str] = None,
+    ) -> dict:
         """Chat with Google Gemini API"""
         try:
             import google.generativeai as genai
@@ -110,7 +138,12 @@ class ModelRouter:
             model_name = self.config.get("google", {}).get("model", "gemini-1.5-pro")
 
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(model_name)
+
+            model_kwargs: dict = {}
+            if system_prompt:
+                model_kwargs["system_instruction"] = system_prompt
+
+            model = genai.GenerativeModel(model_name, **model_kwargs)
 
             response = model.generate_content(
                 contents=[msg.get("content", "") for msg in messages],
@@ -128,15 +161,24 @@ class ModelRouter:
         except Exception as e:
             return {"error": f"Google error: {str(e)}"}
 
-    async def _chat_ollama(self, messages: list, temperature: float, max_tokens: int) -> dict:
+    async def _chat_ollama(
+        self,
+        messages: list,
+        temperature: float,
+        max_tokens: int,
+        system_prompt: Optional[str] = None,
+    ) -> dict:
         """Chat with Ollama local model"""
         try:
             base_url = self.config.get("ollama", {}).get("base_url", "http://localhost:11434")
             model_name = self.config.get("ollama", {}).get("model", "llama2")
 
-            # Convert messages to prompt format
-            prompt = "\n".join([f"{msg['role'].upper()}: {msg['content']}" for msg in messages])
-            prompt += "\nASSISTANT:"
+            # Convert messages to prompt format; prepend system instruction when present
+            parts = []
+            if system_prompt:
+                parts.append(f"SYSTEM: {system_prompt}")
+            parts.extend(f"{msg['role'].upper()}: {msg['content']}" for msg in messages)
+            prompt = "\n".join(parts) + "\nASSISTANT:"
 
             async with httpx.AsyncClient() as client:
                 response = await client.post(

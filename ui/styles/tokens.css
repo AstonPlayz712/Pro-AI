@@ -1,0 +1,108 @@
+/* =========================================================
+   Auto Workspace — Design Tokens
+   All CSS custom properties consumed across the application.
+   ========================================================= */
+
+:root {
+  /* ── Colour: Base Surfaces ─────────────────────────────── */
+  --color-bg:         #0c0e14;
+  --color-surface-1:  #111420;
+  --color-surface-2:  #181c28;
+  --color-surface-3:  #1e2332;
+  --color-border:     #272d3f;
+  --color-border-muted: #1e2332;
+
+  /* ── Colour: Text ──────────────────────────────────────── */
+  --color-text:       #e4e6ef;
+  --color-text-muted: #8b93a8;
+  --color-text-dim:   #555e74;
+
+  /* ── Colour: Accents (default / neutral) ───────────────── */
+  --color-accent:     #4f8cff;
+  --color-accent-dim: rgba(79, 140, 255, 0.15);
+  --color-accent-2:   #3a6edb;
+
+  /* ── Colour: Mode Accents ──────────────────────────────── */
+  --color-mode-architect: #4f8cff;
+  --color-mode-debugger:  #e85a4f;
+  --color-mode-analyst:   #e0a23a;
+  --color-mode-builder:   #3ecf8e;
+
+  --color-mode-architect-dim: rgba(79,  140, 255, 0.15);
+  --color-mode-debugger-dim:  rgba(232,  90,  79, 0.15);
+  --color-mode-analyst-dim:   rgba(224, 162,  58, 0.15);
+  --color-mode-builder-dim:   rgba( 62, 207, 142, 0.15);
+
+  /* ── Colour: Semantic ──────────────────────────────────── */
+  --color-success: #3ecf8e;
+  --color-warn:    #e0a23a;
+  --color-danger:  #e85a4f;
+  --color-info:    #4f8cff;
+
+  /* ── Glassmorphism ─────────────────────────────────────── */
+  --glass-bg:     rgba(24, 28, 40, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-blur:   12px;
+  --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+
+  /* ── Spacing ───────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ── Border Radii ──────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  /* ── Typography ────────────────────────────────────────── */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI",
+               Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code",
+               ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --text-xs:   11px;
+  --text-sm:   13px;
+  --text-base: 15px;
+  --text-md:   17px;
+  --text-lg:   20px;
+  --text-xl:   24px;
+  --text-2xl:  30px;
+
+  --leading-tight:  1.25;
+  --leading-normal: 1.5;
+  --leading-loose:  1.75;
+
+  /* ── Layout ────────────────────────────────────────────── */
+  --topbar-height:    52px;
+  --leftnav-width:    220px;
+  --leftnav-collapsed: 56px;
+  --dai-panel-width:  300px;
+  --acs-height:       56px;
+
+  /* ── Chip ──────────────────────────────────────────────── */
+  --chip-height:    24px;
+  --chip-radius:    var(--radius-pill);
+  --chip-font-size: var(--text-xs);
+
+  /* ── Transition ────────────────────────────────────────── */
+  --transition-fast:   80ms ease;
+  --transition-base:  150ms ease;
+  --transition-slow:  300ms ease;
+
+  /* ── Z-Index ────────────────────────────────────────────── */
+  --z-base:    0;
+  --z-raised:  10;
+  --z-overlay: 20;
+  --z-modal:   30;
+  --z-topbar:  40;
+  --z-tooltip: 50;
+}
