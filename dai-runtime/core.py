@@ -8,98 +8,61 @@ Doctrine
 --------
 - DAI orchestrates; it does not execute. This module is the L0 runtime shell
   that lets the strategic mind reach external surfaces.
-- All reasoning and generation calls go through Perplexity via
-  ``perplexity_query()``.
+- **Connector-first architecture.** Every outbound call — including
+  Perplexity — leaves through the host's external-connector dispatcher.
+  DAI-Runtime never holds API keys, bearer tokens, or raw HTTP credentials.
 - No local inference. No LM Studio. No GPU usage.
 - Every Sub-AI invocation is funnelled through this module so the runtime
-  remains the single chokepoint for credentials, logging, and policy.
+  remains the single chokepoint for routing, logging, and policy.
 
 Public surface
 --------------
 - ``perplexity_query(prompt, *, system=None, model=None, temperature=0.2,
-  max_tokens=2048, timeout=60)`` — single canonical Perplexity call.
+  max_tokens=2048)`` — single canonical Perplexity call routed via the
+  Perplexity Connector.
 - ``run_subai(subai_name, task, *, registry_path=None, extra_context=None)``
   — load a Sub-AI's signature from the registry and dispatch the task.
 - ``DAIRuntimeError`` — raised on configuration or transport failure.
+- ``set_external_connector_dispatcher(fn)`` — re-exported from ``router``;
+  the host registers its connector surface here.
 
-Environment
------------
-- ``PERPLEXITY_API_KEY``         — required
-- ``PERPLEXITY_API_BASE``        — optional, default ``https://api.perplexity.ai``
-- ``PERPLEXITY_DEFAULT_MODEL``   — optional, default ``sonar-pro``
+Bootstrap
+---------
+The host application (VS Code extension, MCP gateway, Perplexity-Connector
+client) MUST register a dispatcher at startup:
 
-This module is intentionally dependency-light: only ``requests`` and
-``python-dotenv`` are required at runtime.
+    from dai_runtime.core import set_external_connector_dispatcher
+
+    def my_dispatcher(connector_id: str, action: str, payload: dict) -> str:
+        ...
+
+    set_external_connector_dispatcher(my_dispatcher)
+
+Until a dispatcher is registered, every call raises ``DAIRuntimeError`` so
+the missing wiring is visible rather than silent.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
-try:
-    import requests  # type: ignore
-except ImportError as exc:  # pragma: no cover - hard dependency
-    raise ImportError(
-        "DAI-Runtime requires the 'requests' package. Install with "
-        "`pip install requests`."
-    ) from exc
-
-try:
-    from dotenv import load_dotenv  # type: ignore
-except ImportError:  # pragma: no cover - graceful fallback
-    def load_dotenv(*_args: Any, **_kwargs: Any) -> bool:
-        return False
-
 
 logger = logging.getLogger("dai_runtime")
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Paths
 # ---------------------------------------------------------------------------
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-_ENV_PATH = _REPO_ROOT / ".env"
-_REGISTRY_PATH_DEFAULT = Path(__file__).resolve().parent / "subai_registry.json"
-_CONNECTORS_PATH_DEFAULT = Path(__file__).resolve().parent / "connectors.json"
-_SYSTEM_PROMPT_PATH_DEFAULT = Path(__file__).resolve().parent / "system_prompt.txt"
-
-DEFAULT_API_BASE = "https://api.perplexity.ai"
-DEFAULT_MODEL = "sonar-pro"
-CHAT_ENDPOINT = "/chat/completions"
+_RUNTIME_DIR = Path(__file__).resolve().parent
+_REGISTRY_PATH_DEFAULT = _RUNTIME_DIR / "subai_registry.json"
+_CONNECTORS_PATH_DEFAULT = _RUNTIME_DIR / "connectors.json"
+_SYSTEM_PROMPT_PATH_DEFAULT = _RUNTIME_DIR / "system_prompt.txt"
 
 
 class DAIRuntimeError(RuntimeError):
     """Raised when the runtime cannot satisfy a request."""
-
-
-@dataclass(frozen=True)
-class PerplexityConfig:
-    api_key: str
-    api_base: str = DEFAULT_API_BASE
-    default_model: str = DEFAULT_MODEL
-
-
-def _load_config() -> PerplexityConfig:
-    """Read PERPLEXITY_API_KEY from .env (or environment) exactly once."""
-    if _ENV_PATH.exists():
-        load_dotenv(_ENV_PATH, override=False)
-
-    api_key = os.environ.get("PERPLEXITY_API_KEY", "").strip()
-    if not api_key:
-        raise DAIRuntimeError(
-            "PERPLEXITY_API_KEY is not set. Add it to .env at the repo root "
-            "or export it in the shell before invoking DAI-Runtime."
-        )
-    return PerplexityConfig(
-        api_key=api_key,
-        api_base=os.environ.get("PERPLEXITY_API_BASE", DEFAULT_API_BASE).rstrip("/"),
-        default_model=os.environ.get("PERPLEXITY_DEFAULT_MODEL", DEFAULT_MODEL),
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -113,27 +76,27 @@ def perplexity_query(
     model: Optional[str] = None,
     temperature: float = 0.2,
     max_tokens: int = 2048,
-    timeout: int = 60,
     extra_messages: Optional[List[Dict[str, str]]] = None,
 ) -> str:
-    """Send a chat completion to Perplexity and return the assistant text.
+    """Run a reasoning call through the Perplexity Connector.
+
+    All parameters are passed as a payload to the dispatcher; the host
+    connector is responsible for authentication, model selection, and
+    transport. The runtime never opens an HTTP socket of its own.
 
     Parameters
     ----------
     prompt : str
         The user message.
     system : str, optional
-        System prompt. If omitted, the canonical DAI system prompt is loaded
+        System prompt. Defaults to the canonical DAI system prompt loaded
         from ``system_prompt.txt``.
     model : str, optional
-        Perplexity model id. Defaults to ``PERPLEXITY_DEFAULT_MODEL`` or
-        ``sonar-pro``.
+        Perplexity model id. ``None`` means "let the connector choose".
     temperature : float
         Sampling temperature.
     max_tokens : int
         Maximum tokens in the response.
-    timeout : int
-        HTTP timeout in seconds.
     extra_messages : list, optional
         Additional message dicts inserted between system and user prompts
         (e.g. prior turns for an autonomy loop).
@@ -148,8 +111,6 @@ def perplexity_query(
     DAIRuntimeError
         On configuration or transport failure.
     """
-    config = _load_config()
-
     if system is None:
         system = _load_default_system_prompt()
 
@@ -158,37 +119,32 @@ def perplexity_query(
         messages.extend(extra_messages)
     messages.append({"role": "user", "content": prompt})
 
-    payload = {
-        "model": model or config.default_model,
+    connector_spec = _load_connector_spec("perplexity")
+    payload: Dict[str, Any] = {
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
-    headers = {
-        "Authorization": f"Bearer {config.api_key}",
-        "Content-Type": "application/json",
-    }
-    url = f"{config.api_base}{CHAT_ENDPOINT}"
+    if model is not None:
+        payload["model"] = model
+    elif connector_spec.get("default_model"):
+        payload["model"] = connector_spec["default_model"]
 
-    logger.debug("perplexity_query → %s · model=%s", url, payload["model"])
+    # Lazy import to avoid a circular dependency at module load time.
+    from .router import _dispatch_external  # type: ignore  # noqa: WPS433
 
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=timeout)
-    except requests.RequestException as exc:
-        raise DAIRuntimeError(f"Perplexity transport error: {exc}") from exc
+    logger.debug(
+        "perplexity_query → connector=%s action=%s model=%s",
+        connector_spec.get("connector_id", "perplexity"),
+        connector_spec.get("action", "chat_completions"),
+        payload.get("model"),
+    )
 
-    if response.status_code != 200:
-        raise DAIRuntimeError(
-            f"Perplexity returned {response.status_code}: {response.text[:500]}"
-        )
-
-    try:
-        data = response.json()
-        return data["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, ValueError) as exc:
-        raise DAIRuntimeError(
-            f"Unexpected Perplexity response shape: {response.text[:500]}"
-        ) from exc
+    return _dispatch_external(
+        connector_spec.get("connector_id", "perplexity"),
+        connector_spec.get("action", "chat_completions"),
+        payload,
+    )
 
 
 def run_subai(
@@ -200,10 +156,11 @@ def run_subai(
 ) -> str:
     """Look up a Sub-AI by name and dispatch its task.
 
-    Sub-AIs whose connector is ``perplexity`` are executed inline through
-    ``perplexity_query``. Sub-AIs that target a different connector are
-    delegated to ``router.route_task`` so this module stays the chokepoint
-    only for reasoning, not for non-Perplexity I/O.
+    Sub-AIs whose connector is ``perplexity`` are executed through
+    ``perplexity_query`` (which itself delegates to the Perplexity
+    Connector). Sub-AIs targeting any other connector are dispatched via
+    ``router.route_task``. Either way, every outbound call leaves through
+    the host's connector dispatcher.
     """
     registry = _load_registry(registry_path or _REGISTRY_PATH_DEFAULT)
     entry = next((s for s in registry if s["name"] == subai_name), None)
@@ -219,10 +176,15 @@ def run_subai(
     if connector == "perplexity":
         return perplexity_query(prompt=task, system=sub_system_prompt)
 
-    # Non-Perplexity connectors are handled by the router. Imported lazily to
-    # avoid a circular import at module load time.
     from .router import route_task  # type: ignore  # noqa: WPS433
     return route_task(subai_name, task, registry=registry)
+
+
+# Re-export so callers can bootstrap from a single module.
+def set_external_connector_dispatcher(dispatcher: Any) -> None:
+    """Register the host-supplied connector dispatcher (re-export of router)."""
+    from .router import set_external_connector_dispatcher as _set  # noqa: WPS433
+    _set(dispatcher)
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +196,7 @@ def _load_default_system_prompt() -> str:
         return _SYSTEM_PROMPT_PATH_DEFAULT.read_text(encoding="utf-8").strip()
     return (
         "You are DAI — Director AI. Orchestrate, do not execute. "
-        "Use Perplexity as your execution engine."
+        "Use the Perplexity Connector as your execution engine."
     )
 
 
@@ -250,9 +212,22 @@ def _load_registry(path: Path) -> List[Dict[str, Any]]:
     return data
 
 
+def _load_connector_spec(connector_id: str) -> Dict[str, Any]:
+    if not _CONNECTORS_PATH_DEFAULT.exists():
+        raise DAIRuntimeError(f"connectors.json missing at {_CONNECTORS_PATH_DEFAULT}")
+    try:
+        data = json.loads(_CONNECTORS_PATH_DEFAULT.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise DAIRuntimeError(f"connectors.json is not valid JSON: {exc}") from exc
+    spec = data.get(connector_id)
+    if not isinstance(spec, dict):
+        raise DAIRuntimeError(f"Connector '{connector_id}' not defined in connectors.json")
+    return spec
+
+
 __all__ = [
     "DAIRuntimeError",
-    "PerplexityConfig",
     "perplexity_query",
     "run_subai",
+    "set_external_connector_dispatcher",
 ]

@@ -1,12 +1,12 @@
 {
   "perplexity": {
-    "kind": "http",
-    "endpoint": "https://api.perplexity.ai/chat/completions",
-    "auth": "Bearer ${PERPLEXITY_API_KEY}",
+    "kind": "external_connector",
+    "connector_id": "perplexity",
+    "action": "chat_completions",
+    "auth": "external_connector",
     "default_model": "sonar-pro",
-    "timeout": 60,
     "request_shape": {
-      "model": "<model id>",
+      "model": "<model id, optional>",
       "messages": [
         {"role": "system", "content": "<system prompt>"},
         {"role": "user", "content": "<task>"}
@@ -14,26 +14,30 @@
       "temperature": 0.2,
       "max_tokens": 2048
     },
-    "notes": "Primary execution engine for DAI. Every reasoning call funnels here via core.perplexity_query()."
+    "notes": "Primary execution engine for DAI. Routed through the host's Perplexity Connector. No API key, bearer token, or env var required by DAI-Runtime."
   },
   "claude_desktop": {
-    "kind": "http",
-    "endpoint": "http://127.0.0.1:7060/v1/messages",
-    "auth": "none (localhost shim)",
+    "kind": "external_connector",
+    "connector_id": "claude_desktop",
+    "action": "messages",
+    "auth": "external_connector",
     "default_model": "claude-sonnet-4-6",
-    "timeout": 60,
     "request_shape": {
-      "model": "<model id>",
+      "model": "<model id, optional>",
       "system": "<system prompt>",
       "messages": [{"role": "user", "content": "<task>"}]
     },
-    "notes": "Expects a local proxy bridging Claude Desktop to an HTTP endpoint. Configure the port to match your shim."
+    "notes": "Routed through the host's Claude Desktop connector or MCP bridge. No tokens held by DAI-Runtime."
   },
   "copilot": {
-    "kind": "cli",
-    "command": "gh copilot suggest -t shell {task}",
-    "timeout": 120,
-    "notes": "Runs the GitHub Copilot CLI. Replace the command template if you prefer 'gh copilot explain' or a Copilot Chat shim."
+    "kind": "external_connector",
+    "connector_id": "github_copilot",
+    "action": "chat",
+    "auth": "external_connector",
+    "request_shape": {
+      "prompt": "<task>"
+    },
+    "notes": "Routed through the host's Copilot connector (e.g. VS Code Copilot Chat bridge). No tokens held by DAI-Runtime."
   },
   "slack": {
     "kind": "external_connector",
@@ -44,7 +48,7 @@
       "channel": "<from subai.slack_channel>",
       "text": "<task>"
     },
-    "notes": "Routed through the host's Slack external connector. No bot token required."
+    "notes": "Routed through the host's Slack external connector."
   },
   "monday": {
     "kind": "external_connector",
@@ -55,7 +59,7 @@
       "board_id": "<from subai.monday_board>",
       "item_name": "DAI: <task>"
     },
-    "notes": "Routed through the host's Monday external connector. No API key required."
+    "notes": "Routed through the host's Monday external connector."
   },
   "asana": {
     "kind": "external_connector",
@@ -67,6 +71,6 @@
       "name": "DAI: <task>",
       "notes": "<task>"
     },
-    "notes": "Routed through the host's Asana external connector. No PAT required."
+    "notes": "Routed through the host's Asana external connector."
   }
 }

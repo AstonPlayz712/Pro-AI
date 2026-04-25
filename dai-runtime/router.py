@@ -2,43 +2,39 @@
 DAI-Runtime · router.py
 =======================
 
-Routing engine for DAI Sub-AI calls.
+Connector-first routing engine for DAI Sub-AI calls.
 
-Reads ``subai_registry.json`` and dispatches a task to the connector named
-on the Sub-AI's record. Connectors are described in ``connectors.json`` —
-the router treats that file as the source of truth for endpoint shape and
-command format.
+Reads ``subai_registry.json`` and dispatches each task through the host's
+external-connector surface. **Every connector is external.** DAI-Runtime
+holds no API keys, no bearer tokens, no env-var-driven credentials.
 
-Supported connectors (per the WIP spec):
+Connector ids declared in ``connectors.json`` (WIP):
 
-- ``perplexity``     — funnel through ``core.perplexity_query``
-- ``claude_desktop`` — local-host Anthropic-compatible HTTP shim
-- ``copilot``        — GitHub Copilot CLI / Chat shim
-- ``slack``          — Slack Web API (chat.postMessage)
-- ``monday``         — Monday.com GraphQL API
-- ``asana``          — Asana REST API
+- ``perplexity``      — primary reasoning engine (via Perplexity Connector)
+- ``claude_desktop``  — Claude Desktop / MCP bridge
+- ``copilot``         — GitHub Copilot connector
+- ``slack``           — Slack connector
+- ``monday``          — Monday connector
+- ``asana``           — Asana connector
 
-Anything not Perplexity is treated as an L0 surface call. The router never
-makes autonomy decisions — it forwards.
+To wire the runtime into your host, register a dispatcher once at startup:
+
+    from dai_runtime.router import set_external_connector_dispatcher
+
+    def my_dispatcher(connector_id: str, action: str, payload: dict) -> str:
+        ...  # call the host's connector surface and return text
+
+    set_external_connector_dispatcher(my_dispatcher)
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import shlex
-import subprocess
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-try:
-    import requests  # type: ignore
-except ImportError as exc:  # pragma: no cover
-    raise ImportError(
-        "DAI-Runtime router requires 'requests'. Install with `pip install requests`."
-    ) from exc
-
-from .core import DAIRuntimeError, perplexity_query  # noqa: WPS300
+from .core import DAIRuntimeError  # noqa: WPS300
 
 logger = logging.getLogger("dai_runtime.router")
 
@@ -48,25 +44,21 @@ _CONNECTORS_PATH = _RUNTIME_DIR / "connectors.json"
 
 
 # ---------------------------------------------------------------------------
-# External connector dispatcher
+# External connector dispatcher (single chokepoint for ALL outbound calls)
 # ---------------------------------------------------------------------------
-#
-# Slack, Monday, and Asana are reached through external connectors provided by
-# the host runtime (e.g. Perplexity Connectors, an MCP gateway, or a similar
-# brokered surface). DAI-Runtime never holds tokens for these systems.
-#
-# To wire a real dispatcher, call ``set_external_connector_dispatcher(fn)``
-# from your application bootstrap. The dispatcher receives
-# ``(connector_id, action, payload)`` and must return a string response.
-# Until a dispatcher is registered, calls raise DAIRuntimeError so the lack
-# of wiring is visible rather than silent.
 
 ExternalDispatcher = Callable[[str, str, Dict[str, Any]], str]
 _external_dispatcher: Optional[ExternalDispatcher] = None
 
 
 def set_external_connector_dispatcher(dispatcher: ExternalDispatcher) -> None:
-    """Register the host-supplied function that calls external connectors."""
+    """Register the host-supplied function that calls external connectors.
+
+    Signature: ``dispatcher(connector_id, action, payload) -> str``.
+
+    Until this is called, every outbound call raises ``DAIRuntimeError``
+    so the missing wiring is visible rather than silent.
+    """
     global _external_dispatcher
     _external_dispatcher = dispatcher
 
@@ -93,8 +85,8 @@ def route_task(
 ) -> str:
     """Route a task to the connector configured for the named Sub-AI.
 
-    Returns the connector's textual response. Raises ``DAIRuntimeError`` on
-    routing or transport failure.
+    Returns the connector's textual response. Raises ``DAIRuntimeError``
+    on routing or transport failure.
     """
     registry = registry if registry is not None else _read_json(_REGISTRY_PATH)
     connectors = connectors if connectors is not None else _read_json(_CONNECTORS_PATH)
@@ -103,63 +95,65 @@ def route_task(
     if entry is None:
         raise DAIRuntimeError(f"Sub-AI '{subai_name}' not in registry.")
 
-    connector_id = entry.get("connector", "perplexity").lower()
-    connector_spec = connectors.get(connector_id)
+    connector_key = entry.get("connector", "perplexity").lower()
+    connector_spec = connectors.get(connector_key)
     if connector_spec is None:
         raise DAIRuntimeError(
-            f"Connector '{connector_id}' for Sub-AI '{subai_name}' is not defined "
+            f"Connector '{connector_key}' for Sub-AI '{subai_name}' is not defined "
             f"in connectors.json."
         )
 
-    handler = _HANDLERS.get(connector_id)
+    handler = _HANDLERS.get(connector_key)
     if handler is None:
-        raise DAIRuntimeError(f"No router handler for connector '{connector_id}'.")
+        raise DAIRuntimeError(f"No router handler for connector '{connector_key}'.")
 
-    logger.info("route_task → %s via %s", subai_name, connector_id)
+    logger.info("route_task → %s via %s", subai_name, connector_key)
     return handler(entry=entry, task=task, connector_spec=connector_spec)
 
 
 # ---------------------------------------------------------------------------
-# Connector handlers
+# Connector handlers — all delegate to the dispatcher
 # ---------------------------------------------------------------------------
 
 def _handle_perplexity(*, entry: Dict[str, Any], task: str, connector_spec: Dict[str, Any]) -> str:
     system_prompt = entry.get("system_prompt") or ""
-    model = connector_spec.get("default_model")
-    return perplexity_query(prompt=task, system=system_prompt or None, model=model)
+    payload: Dict[str, Any] = {
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": task},
+        ],
+        "temperature": 0.2,
+        "max_tokens": 2048,
+    }
+    if connector_spec.get("default_model"):
+        payload["model"] = connector_spec["default_model"]
+    return _dispatch_external(
+        connector_spec.get("connector_id", "perplexity"),
+        connector_spec.get("action", "chat_completions"),
+        payload,
+    )
 
 
 def _handle_claude_desktop(*, entry: Dict[str, Any], task: str, connector_spec: Dict[str, Any]) -> str:
-    """Minimal HTTP shim. Assumes a local proxy that accepts a Claude-style payload."""
-    endpoint = connector_spec.get("endpoint")
-    if not endpoint:
-        raise DAIRuntimeError("claude_desktop connector requires an 'endpoint' in connectors.json.")
-    payload = {
+    payload: Dict[str, Any] = {
         "system": entry.get("system_prompt", ""),
         "messages": [{"role": "user", "content": task}],
-        "model": connector_spec.get("default_model", "claude-sonnet-4-6"),
     }
-    return _post_json(endpoint, payload, timeout=connector_spec.get("timeout", 60))
+    if connector_spec.get("default_model"):
+        payload["model"] = connector_spec["default_model"]
+    return _dispatch_external(
+        connector_spec.get("connector_id", "claude_desktop"),
+        connector_spec.get("action", "messages"),
+        payload,
+    )
 
 
 def _handle_copilot(*, entry: Dict[str, Any], task: str, connector_spec: Dict[str, Any]) -> str:
-    """Run via GitHub Copilot CLI when available; otherwise raise."""
-    command_template = connector_spec.get("command")
-    if not command_template:
-        raise DAIRuntimeError("copilot connector requires a 'command' template in connectors.json.")
-    cmd = command_template.replace("{task}", shlex.quote(task))
-    try:
-        completed = subprocess.run(
-            cmd, shell=True, check=False, capture_output=True, text=True,
-            timeout=connector_spec.get("timeout", 120),
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise DAIRuntimeError(f"Copilot CLI timed out: {exc}") from exc
-    if completed.returncode != 0:
-        raise DAIRuntimeError(
-            f"Copilot CLI exit {completed.returncode}: {completed.stderr.strip()[:500]}"
-        )
-    return completed.stdout.strip()
+    return _dispatch_external(
+        connector_spec.get("connector_id", "github_copilot"),
+        connector_spec.get("action", "chat"),
+        {"prompt": task, "system": entry.get("system_prompt", "")},
+    )
 
 
 def _handle_slack(*, entry: Dict[str, Any], task: str, connector_spec: Dict[str, Any]) -> str:
@@ -216,24 +210,6 @@ def _read_json(path: Path) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise DAIRuntimeError(f"Invalid JSON at {path}: {exc}") from exc
-
-
-def _post_json(
-    url: str,
-    payload: Dict[str, Any],
-    *,
-    headers: Optional[Dict[str, str]] = None,
-    timeout: int = 30,
-) -> str:
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=timeout)
-    except requests.RequestException as exc:
-        raise DAIRuntimeError(f"HTTP transport error to {url}: {exc}") from exc
-    if response.status_code >= 400:
-        raise DAIRuntimeError(
-            f"{url} returned {response.status_code}: {response.text[:500]}"
-        )
-    return response.text
 
 
 __all__ = ["route_task", "set_external_connector_dispatcher"]

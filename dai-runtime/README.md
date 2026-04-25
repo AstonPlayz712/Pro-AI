@@ -3,7 +3,8 @@
 Cloud-hosted execution shell for **DAI — Director AI** of Dynamic SE.
 
 > DAI orchestrates. It does not execute.
-> DAI uses Perplexity as its execution engine.
+> DAI uses the **Perplexity Connector** as its execution engine.
+> DAI-Runtime is **connector-first**: no API keys, no tokens, no env-var credentials.
 
 This package is the L0 runtime that lets the strategic mind (DAI) reach
 external surfaces. It lives alongside, **not inside**, the existing
@@ -32,9 +33,11 @@ concerns stay cleanly separated.
 - DAI plans and decomposes work into Sub-AI tasks.
 - Every Sub-AI call enters `core.run_subai(name, task)`.
 - If the Sub-AI's connector is `perplexity`, the call funnels through
-  `core.perplexity_query()`.
-- Anything else is forwarded to `router.route_task()`, which dispatches
-  to the connector defined in `connectors.json`.
+  `core.perplexity_query()` — which itself dispatches through the
+  host's Perplexity Connector.
+- Anything else is forwarded to `router.route_task()`.
+- **All** outbound calls — Perplexity included — leave through the
+  single external-connector dispatcher registered by the host.
 
 ---
 
@@ -54,28 +57,26 @@ dai-runtime/
 
 ## Setup
 
-1. Add `PERPLEXITY_API_KEY` to `.env` at the repo root:
+DAI-Runtime has no API keys to configure. The host application owns all
+credentials and exposes them as connectors. Bootstrap looks like this:
 
-   ```
-   PERPLEXITY_API_KEY=pplx-...
-   PERPLEXITY_DEFAULT_MODEL=sonar-pro       # optional
-   PERPLEXITY_API_BASE=https://api.perplexity.ai   # optional
-   ```
+```python
+from dai_runtime.core import set_external_connector_dispatcher
 
-2. Install dependencies (these are already used elsewhere in Pro-AI):
+def my_dispatcher(connector_id: str, action: str, payload: dict) -> str:
+    """Route to the host's connector surface and return text."""
+    # e.g. forward to Perplexity Connectors / MCP / VS Code bridge
+    ...
 
-   ```
-   pip install requests python-dotenv
-   ```
+set_external_connector_dispatcher(my_dispatcher)
+```
 
-3. Optional environment variables for non-Perplexity connectors:
+Supported `connector_id` values (declared in `connectors.json`):
+`perplexity`, `claude_desktop`, `github_copilot`, `slack_direct`,
+`monday`, `asana_mcp_merge`.
 
-   - `SLACK_BOT_TOKEN`
-   - `MONDAY_API_KEY`
-   - `ASANA_PAT`
-
-   Claude Desktop assumes a local HTTP shim on `127.0.0.1:7060` —
-   adjust `connectors.json` if your shim uses a different port.
+Until a dispatcher is registered, every outbound call raises
+`DAIRuntimeError` — by design, so missing wiring is visible.
 
 ---
 
@@ -113,23 +114,24 @@ through `core.perplexity_query`.
 
 ## How connectors work
 
-Connectors are L0 — no autonomy, act only on packets. Each entry in
-`connectors.json` declares `kind` (`http` or `cli`), `endpoint` /
-`command`, and either an inline auth token or a `token_env` pointing to
-an environment variable.
+Connectors are L0 — no autonomy, act only on packets. Every entry in
+`connectors.json` is `kind: external_connector` and declares only its
+`connector_id`, `action`, and `request_shape`. Authentication is the
+host's responsibility.
 
-| Connector       | Kind | Auth                       |
-|-----------------|------|----------------------------|
-| `perplexity`    | http | `PERPLEXITY_API_KEY`       |
-| `claude_desktop`| http | local shim                 |
-| `copilot`       | cli  | `gh` auth on the host      |
-| `slack`         | http | `SLACK_BOT_TOKEN`          |
-| `monday`        | http | `MONDAY_API_KEY`           |
-| `asana`         | http | `ASANA_PAT`                |
+| Key             | connector_id        | action             | Auth     |
+|-----------------|---------------------|--------------------|----------|
+| `perplexity`    | `perplexity`        | `chat_completions` | host     |
+| `claude_desktop`| `claude_desktop`    | `messages`         | host     |
+| `copilot`       | `github_copilot`    | `chat`             | host     |
+| `slack`         | `slack_direct`      | `post_message`     | host     |
+| `monday`        | `monday`            | `create_item`      | host     |
+| `asana`         | `asana_mcp_merge`   | `create_task`      | host     |
 
 Adding a new connector means: (a) add an entry to `connectors.json`,
-(b) add a `_handle_<id>` function to `router.py`, (c) wire it into
-the `_HANDLERS` dict.
+(b) add a `_handle_<key>` function to `router.py`, (c) register it in
+the `_HANDLERS` dict, (d) ensure the host dispatcher recognises the new
+`connector_id`.
 
 ---
 
