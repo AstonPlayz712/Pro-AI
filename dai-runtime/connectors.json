@@ -1,0 +1,73 @@
+{
+  "perplexity": {
+    "kind": "http",
+    "endpoint": "https://api.perplexity.ai/chat/completions",
+    "auth": "Bearer ${PERPLEXITY_API_KEY}",
+    "default_model": "sonar-pro",
+    "timeout": 60,
+    "request_shape": {
+      "model": "<model id>",
+      "messages": [
+        {"role": "system", "content": "<system prompt>"},
+        {"role": "user", "content": "<task>"}
+      ],
+      "temperature": 0.2,
+      "max_tokens": 2048
+    },
+    "notes": "Primary execution engine for DAI. Every reasoning call funnels here via core.perplexity_query()."
+  },
+  "claude_desktop": {
+    "kind": "http",
+    "endpoint": "http://127.0.0.1:7060/v1/messages",
+    "auth": "none (localhost shim)",
+    "default_model": "claude-sonnet-4-6",
+    "timeout": 60,
+    "request_shape": {
+      "model": "<model id>",
+      "system": "<system prompt>",
+      "messages": [{"role": "user", "content": "<task>"}]
+    },
+    "notes": "Expects a local proxy bridging Claude Desktop to an HTTP endpoint. Configure the port to match your shim."
+  },
+  "copilot": {
+    "kind": "cli",
+    "command": "gh copilot suggest -t shell {task}",
+    "timeout": 120,
+    "notes": "Runs the GitHub Copilot CLI. Replace the command template if you prefer 'gh copilot explain' or a Copilot Chat shim."
+  },
+  "slack": {
+    "kind": "http",
+    "endpoint": "https://slack.com/api/chat.postMessage",
+    "token_env": "SLACK_BOT_TOKEN",
+    "timeout": 30,
+    "request_shape": {
+      "channel": "<#channel-from-subai-record>",
+      "text": "<task>"
+    },
+    "notes": "Posts the task into the Sub-AI's slack_channel."
+  },
+  "monday": {
+    "kind": "http",
+    "endpoint": "https://api.monday.com/v2",
+    "token_env": "MONDAY_API_KEY",
+    "timeout": 30,
+    "request_shape": {
+      "query": "mutation { create_item (board_id: <board>, item_name: \"DAI: <task>\") { id } }"
+    },
+    "notes": "Creates a new item on the Sub-AI's monday_board."
+  },
+  "asana": {
+    "kind": "http",
+    "endpoint": "https://app.asana.com/api/1.0/tasks",
+    "token_env": "ASANA_PAT",
+    "timeout": 30,
+    "request_shape": {
+      "data": {
+        "name": "DAI: <task>",
+        "notes": "<task>",
+        "projects": ["<asana_project>"]
+      }
+    },
+    "notes": "Creates a task in the Sub-AI's asana_project."
+  }
+}
