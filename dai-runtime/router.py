@@ -26,11 +26,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import shlex
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 try:
     import requests  # type: ignore
@@ -46,6 +45,39 @@ logger = logging.getLogger("dai_runtime.router")
 _RUNTIME_DIR = Path(__file__).resolve().parent
 _REGISTRY_PATH = _RUNTIME_DIR / "subai_registry.json"
 _CONNECTORS_PATH = _RUNTIME_DIR / "connectors.json"
+
+
+# ---------------------------------------------------------------------------
+# External connector dispatcher
+# ---------------------------------------------------------------------------
+#
+# Slack, Monday, and Asana are reached through external connectors provided by
+# the host runtime (e.g. Perplexity Connectors, an MCP gateway, or a similar
+# brokered surface). DAI-Runtime never holds tokens for these systems.
+#
+# To wire a real dispatcher, call ``set_external_connector_dispatcher(fn)``
+# from your application bootstrap. The dispatcher receives
+# ``(connector_id, action, payload)`` and must return a string response.
+# Until a dispatcher is registered, calls raise DAIRuntimeError so the lack
+# of wiring is visible rather than silent.
+
+ExternalDispatcher = Callable[[str, str, Dict[str, Any]], str]
+_external_dispatcher: Optional[ExternalDispatcher] = None
+
+
+def set_external_connector_dispatcher(dispatcher: ExternalDispatcher) -> None:
+    """Register the host-supplied function that calls external connectors."""
+    global _external_dispatcher
+    _external_dispatcher = dispatcher
+
+
+def _dispatch_external(connector_id: str, action: str, payload: Dict[str, Any]) -> str:
+    if _external_dispatcher is None:
+        raise DAIRuntimeError(
+            f"External connector '{connector_id}' was invoked but no dispatcher is "
+            "registered. Call set_external_connector_dispatcher() during bootstrap."
+        )
+    return _external_dispatcher(connector_id, action, payload)
 
 
 # ---------------------------------------------------------------------------
@@ -131,46 +163,36 @@ def _handle_copilot(*, entry: Dict[str, Any], task: str, connector_spec: Dict[st
 
 
 def _handle_slack(*, entry: Dict[str, Any], task: str, connector_spec: Dict[str, Any]) -> str:
-    token = os.environ.get(connector_spec.get("token_env", "SLACK_BOT_TOKEN"), "")
-    if not token:
-        raise DAIRuntimeError("Slack connector needs SLACK_BOT_TOKEN in environment.")
     channel = entry.get("slack_channel")
     if not channel:
         raise DAIRuntimeError(f"Sub-AI '{entry['name']}' has no slack_channel configured.")
-    endpoint = connector_spec.get("endpoint", "https://slack.com/api/chat.postMessage")
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=utf-8"}
-    payload = {"channel": channel, "text": task}
-    return _post_json(endpoint, payload, headers=headers, timeout=30)
+    return _dispatch_external(
+        connector_spec.get("connector_id", "slack_direct"),
+        connector_spec.get("action", "post_message"),
+        {"channel": channel, "text": task},
+    )
 
 
 def _handle_monday(*, entry: Dict[str, Any], task: str, connector_spec: Dict[str, Any]) -> str:
-    token = os.environ.get(connector_spec.get("token_env", "MONDAY_API_KEY"), "")
-    if not token:
-        raise DAIRuntimeError("Monday connector needs MONDAY_API_KEY in environment.")
     board_id = entry.get("monday_board")
     if not board_id:
         raise DAIRuntimeError(f"Sub-AI '{entry['name']}' has no monday_board configured.")
-    endpoint = connector_spec.get("endpoint", "https://api.monday.com/v2")
-    safe_task = task.replace("\\", "\\\\").replace('"', '\\"')
-    query = (
-        f'mutation {{ create_item (board_id: {int(board_id)}, '
-        f'item_name: "DAI: {safe_task[:64]}") {{ id }} }}'
+    return _dispatch_external(
+        connector_spec.get("connector_id", "monday"),
+        connector_spec.get("action", "create_item"),
+        {"board_id": board_id, "item_name": f"DAI: {task[:120]}", "task": task},
     )
-    headers = {"Authorization": token, "Content-Type": "application/json"}
-    return _post_json(endpoint, {"query": query}, headers=headers, timeout=30)
 
 
 def _handle_asana(*, entry: Dict[str, Any], task: str, connector_spec: Dict[str, Any]) -> str:
-    token = os.environ.get(connector_spec.get("token_env", "ASANA_PAT"), "")
-    if not token:
-        raise DAIRuntimeError("Asana connector needs ASANA_PAT in environment.")
     project_id = entry.get("asana_project")
     if not project_id:
         raise DAIRuntimeError(f"Sub-AI '{entry['name']}' has no asana_project configured.")
-    endpoint = connector_spec.get("endpoint", "https://app.asana.com/api/1.0/tasks")
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    payload = {"data": {"name": f"DAI: {task[:120]}", "notes": task, "projects": [str(project_id)]}}
-    return _post_json(endpoint, payload, headers=headers, timeout=30)
+    return _dispatch_external(
+        connector_spec.get("connector_id", "asana_mcp_merge"),
+        connector_spec.get("action", "create_task"),
+        {"project": project_id, "name": f"DAI: {task[:120]}", "notes": task},
+    )
 
 
 _HANDLERS = {
@@ -214,4 +236,4 @@ def _post_json(
     return response.text
 
 
-__all__ = ["route_task"]
+__all__ = ["route_task", "set_external_connector_dispatcher"]
