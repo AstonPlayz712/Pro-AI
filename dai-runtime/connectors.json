@@ -1,0 +1,76 @@
+{
+  "perplexity": {
+    "kind": "external_connector",
+    "connector_id": "perplexity",
+    "action": "chat_completions",
+    "auth": "external_connector",
+    "default_model": "sonar-pro",
+    "request_shape": {
+      "model": "<model id, optional>",
+      "messages": [
+        {"role": "system", "content": "<system prompt>"},
+        {"role": "user", "content": "<task>"}
+      ],
+      "temperature": 0.2,
+      "max_tokens": 2048
+    },
+    "notes": "Primary execution engine for DAI. Routed through the host's Perplexity Connector. No API key, bearer token, or env var required by DAI-Runtime."
+  },
+  "claude_desktop": {
+    "kind": "external_connector",
+    "connector_id": "claude_desktop",
+    "action": "messages",
+    "auth": "external_connector",
+    "default_model": "claude-sonnet-4-6",
+    "request_shape": {
+      "model": "<model id, optional>",
+      "system": "<system prompt>",
+      "messages": [{"role": "user", "content": "<task>"}]
+    },
+    "notes": "Routed through the host's Claude Desktop connector or MCP bridge. No tokens held by DAI-Runtime."
+  },
+  "copilot": {
+    "kind": "external_connector",
+    "connector_id": "github_copilot",
+    "action": "chat",
+    "auth": "external_connector",
+    "request_shape": {
+      "prompt": "<task>"
+    },
+    "notes": "Routed through the host's Copilot connector (e.g. VS Code Copilot Chat bridge). No tokens held by DAI-Runtime."
+  },
+  "slack": {
+    "kind": "external_connector",
+    "connector_id": "slack_direct",
+    "action": "post_message",
+    "auth": "external_connector",
+    "request_shape": {
+      "channel": "<from subai.slack_channel>",
+      "text": "<task>"
+    },
+    "notes": "Routed through the host's Slack external connector."
+  },
+  "monday": {
+    "kind": "external_connector",
+    "connector_id": "monday",
+    "action": "create_item",
+    "auth": "external_connector",
+    "request_shape": {
+      "board_id": "<from subai.monday_board>",
+      "item_name": "DAI: <task>"
+    },
+    "notes": "Routed through the host's Monday external connector."
+  },
+  "asana": {
+    "kind": "external_connector",
+    "connector_id": "asana_mcp_merge",
+    "action": "create_task",
+    "auth": "external_connector",
+    "request_shape": {
+      "project": "<from subai.asana_project>",
+      "name": "DAI: <task>",
+      "notes": "<task>"
+    },
+    "notes": "Routed through the host's Asana external connector."
+  }
+}

@@ -1,0 +1,128 @@
+[
+  {
+    "name": "Silicon AI",
+    "department": "DT-1 Hardware",
+    "connector": "perplexity",
+    "system_prompt": "You are Silicon AI, a Sub-AI under DT Hardware. Domain: CPU, GPU, SoC design, perf-per-watt curves, process-node modelling. L1 — independent logic. Return realistic, defensible component specs and performance curves. No fantasy parameters.",
+    "slack_channel": "#dt-hardware",
+    "monday_board": "",
+    "asana_project": ""
+  },
+  {
+    "name": "Kernel AI",
+    "department": "DT-2 OS",
+    "connector": "perplexity",
+    "system_prompt": "You are Kernel AI, a Sub-AI under DT OS. Domain: kernel architecture, scheduler, drivers, power governor for simulated device OSes. L1 — independent logic.",
+    "slack_channel": "#dt-os",
+    "monday_board": "",
+    "asana_project": ""
+  },
+  {
+    "name": "Factory AI",
+    "department": "DT-3 Manufacturing",
+    "connector": "perplexity",
+    "system_prompt": "You are Factory AI, a Sub-AI under DT Manufacturing. Domain: production lines, throughput, yield, QC gates. L1 — independent logic.",
+    "slack_channel": "#dt-manufacturing",
+    "monday_board": "",
+    "asana_project": ""
+  },
+  {
+    "name": "Consumer AI",
+    "department": "DT-4 Market",
+    "connector": "perplexity",
+    "system_prompt": "You are Consumer AI, a Sub-AI under DT Market. Domain: consumer segments, preferences, demand simulation. L1 — independent logic.",
+    "slack_channel": "#dt-market",
+    "monday_board": "",
+    "asana_project": ""
+  },
+  {
+    "name": "Tech Tree AI",
+    "department": "DT-5 R&D",
+    "connector": "perplexity",
+    "system_prompt": "You are Tech Tree AI, a Sub-AI under DT R&D. Domain: technology graph, prerequisites, unlock pacing. L1 — independent logic.",
+    "slack_channel": "#dt-rnd",
+    "monday_board": "",
+    "asana_project": ""
+  },
+  {
+    "name": "Ledger AI",
+    "department": "DT-6 Finance",
+    "connector": "perplexity",
+    "system_prompt": "You are Ledger AI, a Sub-AI under DT Finance. Domain: costs, revenue, P&L, cash flow. L1 — independent logic.",
+    "slack_channel": "#dt-finance",
+    "monday_board": "",
+    "asana_project": ""
+  },
+  {
+    "name": "News AI",
+    "department": "DT-7 Events",
+    "connector": "perplexity",
+    "system_prompt": "You are News AI, a Sub-AI under DT Events. Domain: event generation, in-game news feed, trend pulses. L1 — independent logic.",
+    "slack_channel": "#dt-events",
+    "monday_board": "",
+    "asana_project": ""
+  },
+  {
+    "name": "Telemetry AI",
+    "department": "DT-8 QA & Telemetry",
+    "connector": "perplexity",
+    "system_prompt": "You are Telemetry AI, a Sub-AI under DT QA & Telemetry. Domain: perf telemetry, crash reports, balance signals. L1 — independent logic.",
+    "slack_channel": "#dt-qa",
+    "monday_board": "",
+    "asana_project": ""
+  },
+  {
+    "name": "Window Manager AI",
+    "department": "BOS-1 Shell",
+    "connector": "perplexity",
+    "system_prompt": "You are Window Manager AI, a Sub-AI under BOS Shell. Domain: window lifecycle, tiling, z-order, focus. L1 — independent logic.",
+    "slack_channel": "#bos-shell",
+    "monday_board": "",
+    "asana_project": ""
+  },
+  {
+    "name": "Editor AI",
+    "department": "BOS-2 Tools",
+    "connector": "perplexity",
+    "system_prompt": "You are Editor AI, a Sub-AI under BOS Tools. Domain: primary editor surface for DT objects and configs. L1 — independent logic.",
+    "slack_channel": "#bos-tools",
+    "monday_board": "",
+    "asana_project": ""
+  },
+  {
+    "name": "Device Preview AI",
+    "department": "BOS-3 Dashboard",
+    "connector": "perplexity",
+    "system_prompt": "You are Device Preview AI, a Sub-AI under BOS Dashboard. Domain: live device render and state inspector. L1 — independent logic.",
+    "slack_channel": "#bos-dashboard",
+    "monday_board": "",
+    "asana_project": ""
+  },
+  {
+    "name": "Engine AI",
+    "department": "BOS-4 Simulation Runtime",
+    "connector": "perplexity",
+    "system_prompt": "You are Engine AI, a Sub-AI under BOS Simulation Runtime. Domain: tick loop, scheduler, determinism. L1 — independent logic.",
+    "slack_channel": "#bos-runtime",
+    "monday_board": "",
+    "asana_project": ""
+  },
+  {
+    "name": "Scaling AI",
+    "department": "BOS-5 Performance",
+    "connector": "perplexity",
+    "system_prompt": "You are Scaling AI, a Sub-AI under BOS Performance. Domain: adaptive perf scaling, budget enforcement. L1 — independent logic.",
+    "slack_channel": "#bos-perf",
+    "monday_board": "",
+    "asana_project": ""
+  },
+  {
+    "name": "Timeline AI",
+    "department": "BOS-6 Timeline & Notifications",
+    "connector": "perplexity",
+    "system_prompt": "You are Timeline AI, a Sub-AI under BOS Timeline & Notifications. Domain: timeline surface and event log. L1 — independent logic.",
+    "slack_channel": "#bos-timeline",
+    "monday_board": "",
+    "asana_project": ""
+  }
+]
