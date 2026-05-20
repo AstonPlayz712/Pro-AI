@@ -1,25 +1,68 @@
-"""FastAPI application factory and configuration"""
+"""FastAPI application factory for Auto (DAI + AutoLink).
 
-import os
-from pathlib import Path
+Composes ALManager + DAIManager and exposes their routers under `/al/*` and
+`/dai/*`. A default session, scope, and source are bootstrapped at startup
+so callers can exercise the system without admin pre-flight steps.
+"""
+from __future__ import annotations
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
-from .routes import chat_routes
+from .al.manager import ALManager
+from .al.models import (
+    RegisterScopeRequest,
+    RegisterSourceRequest,
+    ScopeRuleDraft,
+)
+from .al.router import build_al_router
+from .core.permissions import Action
+from .core.session import IdentityMode
+from .dai.manager import DAIManager
+from .dai.router import build_dai_router
 
 
 def create_app() -> FastAPI:
-    """Create and configure FastAPI application"""
+    """Build the Auto FastAPI app with AL + DAI wired up."""
 
-    app = FastAPI(
-        title="Private AI Assistant",
-        description="A modular AI assistant with multi-model support",
-        version="1.0.0",
+    al = ALManager()
+    dai = DAIManager(al)
+
+    # -- Bootstrap: a permissive default scope + a session that uses it ----
+    # The default scope grants read/invoke/stream/enumerate on every source.
+    # Admins can register narrower scopes via POST /al/scopes; the default
+    # session can be replaced or augmented by attaching new scopes.
+    default_scope = al.register_scope(
+        RegisterScopeRequest(
+            **{"class": "user"},
+            rules=[
+                ScopeRuleDraft(
+                    source_selector={},
+                    actions=[
+                        Action.READ,
+                        Action.INVOKE,
+                        Action.STREAM,
+                        Action.WRITE,
+                        Action.ENUMERATE,
+                    ],
+                    constraints={},
+                ),
+            ],
+        )
+    )
+    default_session = al.sessions.create(
+        identity_mode=IdentityMode.LOCAL_USER,
+        scope_chain=[default_scope.scope_id],
     )
 
-    # Add CORS middleware
+    # -- App -------------------------------------------------------------
+
+    app = FastAPI(
+        title="Auto Backend",
+        description="DAI + AutoLink (AL) — per logic spec §1–§9",
+        version="0.1.0",
+    )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -28,34 +71,55 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Include routers
-    app.include_router(chat_routes.router)
+    app.state.al = al
+    app.state.dai = dai
+    app.state.default_session_id = default_session.session_id
+    app.state.default_scope_id = default_scope.scope_id
 
-    # Health check endpoint
+    def get_al() -> ALManager:
+        return al
+
+    def get_dai() -> DAIManager:
+        return dai
+
+    app.include_router(build_al_router(get_al))
+    app.include_router(build_dai_router(get_dai))
+
     @app.get("/health")
-    async def health_check():
-        return {"status": "healthy"}
-
-    # Mount static files for UI
-    ui_path = Path(__file__).parent.parent.parent / "ui"
-    if ui_path.exists():
-        app.mount("/ui", StaticFiles(directory=str(ui_path)), name="ui")
-
-    # Root endpoint - serve UI
-    @app.get("/")
-    async def root():
-        ui_index = Path(__file__).parent.parent.parent / "ui" / "index.html"
-        if ui_index.exists():
-            return FileResponse(str(ui_index))
+    def health() -> dict:
         return {
-            "message": "Welcome to Private AI Assistant",
-            "version": "1.0.0",
+            "status": "healthy",
+            "default_session_id": default_session.session_id,
+            "default_scope_id": default_scope.scope_id,
+        }
+
+    @app.get("/")
+    def root() -> dict:
+        return {
+            "service": "auto",
             "endpoints": {
-                "health": "/health",
-                "chat": "/api/chat",
-                "models": "/api/models",
-                "ui": "/ui/index.html",
+                "al": [
+                    "POST /al/sources",
+                    "GET /al/sources",
+                    "POST /al/scopes",
+                    "POST /al/scopes/evaluate",
+                    "GET /al/status",
+                    "POST /al/api-keys",
+                    "POST /al/api-keys/{ref}/rotate",
+                    "GET /al/context",
+                    "POST /al/context/chip",
+                ],
+                "dai": [
+                    "POST /dai/message",
+                    "GET /dai/state",
+                    "POST /dai/goal",
+                    "PATCH /dai/goal",
+                    "POST /dai/subtask",
+                    "PATCH /dai/subtask",
+                    "GET /dai/context-map",
+                ],
             },
+            "default_session_id": default_session.session_id,
         }
 
     return app
