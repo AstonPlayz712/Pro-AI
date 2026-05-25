@@ -157,6 +157,11 @@ cython_debug/
 
 # Node
 node_modules/
+package-lock.json
+
+# TypeScript
+dist/
+*.tsbuildinfo
 
 # IDE
 .vscode/
@@ -184,3 +189,7 @@ __marimo__/
 
 # Uploads (runtime)
 uploads/
+
+# DAI Memory
+memory/
+*.json
